@@ -4,20 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#00ffc8" />
-  <meta name="build-version" content="20250604-004" />
+  <meta name="build-version" content="20250605-001" />
   <title>Beast AI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20250604-004" />
+  <link rel="stylesheet" href="style.css?v=20250605-001" />
   <link rel="manifest" href="manifest.json" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Beast AI" />
   <link rel="apple-touch-icon" href="public/favicon.svg" />
-  <!-- JSZip for ZIP export -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
@@ -36,7 +34,7 @@
     </div>
     <div class="header-text">
       <h1 class="title">BEAST</h1>
-      <p class="subtitle">AI ASSISTANT <span class="version">v2.6</span></p>
+      <p class="subtitle">AI ASSISTANT <span class="version">v3.0</span></p>
     </div>
     <div class="header-right">
       <div class="wake-badge" id="wakeBadge">
@@ -70,21 +68,10 @@
     <div class="log" id="log">
       <div class="entry beast">
         <span class="tag">[BEAST]</span>
-        <span class="msg">Multi-provider AI online. Say "build me a todo app" to generate a complete project, or ask anything else.</span>
+        <span class="msg">Multi-provider AI online. Tap the provider bar to switch between OpenRouter, Gemini, Groq, and HuggingFace. v3.0: Code generation + file explorer active.</span>
       </div>
     </div>
   </section>
-
-  <!-- Code project notification bar (hidden until code is generated) -->
-  <div class="code-project-bar" id="codeProjectBar" style="display:none">
-    <span class="cpb-icon">📁</span>
-    <div class="cpb-info">
-      <span class="cpb-name" id="cpbName">project</span>
-      <span class="cpb-count" id="cpbCount">0 files</span>
-    </div>
-    <button class="cpb-btn" id="cpbViewBtn">VIEW FILES</button>
-    <button class="cpb-btn cpb-zip" id="cpbZipBtn">ZIP ↓</button>
-  </div>
 
   <div class="wave" id="wave">
     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
@@ -98,7 +85,7 @@
   </div>
 
   <div class="input-row">
-    <input class="txt-in" id="txtIn" type="text" placeholder="Ask anything or say 'build me a…'" />
+    <input class="txt-in" id="txtIn" type="text" placeholder="Type a message or ask me to build something..." />
     <button class="send-btn" id="sendBtn">SEND</button>
   </div>
 
@@ -117,11 +104,10 @@
 
   <div class="chips">
     <button class="chip chip-wake" id="wakeChip">🎙 hey beast: OFF</button>
-    <button class="chip chip-code" id="codeChip" style="display:none">📁 Project</button>
     <button class="chip" data-cmd="what time is it">time?</button>
     <button class="chip" data-cmd="what is today">date?</button>
+    <button class="chip" data-cmd="build me a todo app in HTML CSS and JavaScript">build</button>
     <button class="chip" data-cmd="open youtube">YouTube</button>
-    <button class="chip" data-cmd="open google">Google</button>
     <button class="chip" data-cmd="tell me a joke">joke</button>
     <button class="chip" data-cmd="what can you do">help</button>
     <button class="chip" data-cmd="stop speaking">stop</button>
@@ -137,7 +123,7 @@
       <span class="sel-title">// SELECT PROVIDER</span>
       <button class="sel-close" id="providerSelClose">✕</button>
     </div>
-    <div class="sel-body" id="providerList"></div>
+    <div class="sel-body" id="providerList"><!-- rendered by JS --></div>
   </div>
 </div>
 
@@ -148,32 +134,7 @@
       <span class="sel-title" id="modelSelTitle">// SELECT MODEL</span>
       <button class="sel-close" id="modelSelClose">✕</button>
     </div>
-    <div class="sel-body" id="modelList"></div>
-  </div>
-</div>
-
-<!-- ═══ FILE EXPLORER MODAL ════════════════════════════════════ -->
-<div class="fe-bg" id="feModalBg">
-  <div class="fe-sheet">
-    <div class="fe-header">
-      <div>
-        <div class="fe-title">// FILE EXPLORER</div>
-        <div class="fe-project-name" id="feProjectName">📁 project</div>
-      </div>
-      <div class="fe-header-actions">
-        <button class="fe-zip-btn" id="feZipBtn">📥 ZIP</button>
-        <button class="sel-close" id="feClose">✕</button>
-      </div>
-    </div>
-    <!-- File tree -->
-    <div class="fe-tree" id="feTree"></div>
-    <!-- Code preview -->
-    <div class="fe-preview">
-      <div class="fe-preview-header" id="fePreviewHeader">— select a file —</div>
-      <div class="fe-code-wrap" id="feCodeWrap">
-        <pre class="fe-code" id="feCode"></pre>
-      </div>
-    </div>
+    <div class="sel-body" id="modelList"><!-- rendered by JS --></div>
   </div>
 </div>
 
@@ -182,6 +143,7 @@
   <div class="modal">
     <div class="m-title">// API KEYS CONFIG</div>
 
+    <!-- OpenRouter -->
     <div class="m-section">
       <div class="m-prov-header">
         <span class="m-label">OPENROUTER</span>
@@ -198,6 +160,7 @@
     </div>
     <hr class="m-hr"/>
 
+    <!-- Gemini -->
     <div class="m-section">
       <div class="m-prov-header">
         <span class="m-label" style="color:var(--accent5)">GEMINI</span>
@@ -209,6 +172,7 @@
     </div>
     <hr class="m-hr"/>
 
+    <!-- Groq -->
     <div class="m-section">
       <div class="m-prov-header">
         <span class="m-label" style="color:var(--accent4)">GROQ</span>
@@ -220,6 +184,7 @@
     </div>
     <hr class="m-hr"/>
 
+    <!-- HuggingFace -->
     <div class="m-section">
       <div class="m-prov-header">
         <span class="m-label" style="color:var(--accent3)">HUGGINGFACE</span>
@@ -231,7 +196,7 @@
     </div>
     <hr class="m-hr"/>
 
-    <div class="m-desc" style="text-align:center">Keys saved locally only — never sent anywhere except their respective API endpoints.</div>
+    <div class="m-desc" style="text-align:center">Keys are saved locally in your browser only. Never sent anywhere except their respective API endpoints.</div>
     <div class="m-row">
       <button class="m-btn m-btn-cancel" id="modalCancel">CANCEL</button>
       <button class="m-btn m-btn-ok"     id="modalSave">SAVE KEYS</button>
@@ -239,10 +204,11 @@
   </div>
 </div>
 
-<script src="providerManager.js?v=20250604-004"></script>
-<script src="modelManager.js?v=20250604-004"></script>
-<script src="aiServiceManager.js?v=20250604-004"></script>
-<script src="codeGenManager.js?v=20250604-004"></script>
-<script src="script.js?v=20250604-004"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+<script src="providerManager.js?v=20250605-001"></script>
+<script src="modelManager.js?v=20250605-001"></script>
+<script src="aiServiceManager.js?v=20250605-001"></script>
+<script src="codeGen.js?v=20250605-001"></script>
+<script src="script.js?v=20250605-001"></script>
 </body>
 </html>
