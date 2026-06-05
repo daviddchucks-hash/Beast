@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#00ffc8" />
+  <meta name="build-version" content="20250604-004" />
+  <title>Beast AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20250604-004" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Beast AI" />
+  <link rel="apple-touch-icon" href="public/favicon.svg" />
+  <!-- JSZip for ZIP export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="scanlines"></div>
+<div class="wake-toast" id="wakeToast">◈ WAKE WORD DETECTED</div>
+
+<div class="app">
+  <header class="header">
+    <div class="logo-ring">
+      <svg viewBox="0 0 100 100" class="ring-svg">
+        <circle cx="50" cy="50" r="44" class="ring-track"/>
+        <circle cx="50" cy="50" r="44" class="ring-progress" id="ringProg"/>
+      </svg>
+      <span class="logo-letter">B</span>
+    </div>
+    <div class="header-text">
+      <h1 class="title">BEAST</h1>
+      <p class="subtitle">AI ASSISTANT <span class="version">v2.6</span></p>
+    </div>
+    <div class="header-right">
+      <div class="wake-badge" id="wakeBadge">
+        <div class="wake-badge-dot"></div><span id="wakeLbl">HEY BEAST</span>
+      </div>
+      <button class="install-btn" id="installBtn" style="display:none">⬇ INSTALL</button>
+      <button class="api-btn" id="apiBtn">[API]</button>
+      <div class="dot" id="statusDot"></div>
+    </div>
+  </header>
+
+  <!-- Provider + Model selector bar -->
+  <div class="provider-bar" id="providerBar">
+    <button class="pb-provider" id="providerBtn" title="Switch AI provider">
+      <span class="pb-status" id="pbStatus"></span>
+      <span class="pb-name"   id="pbName">OpenRouter</span>
+      <span class="pb-caret">▾</span>
+    </button>
+    <span class="pb-sep">›</span>
+    <button class="pb-model" id="modelBtn" title="Switch model">
+      <span class="pb-model-name" id="pbModelName">Auto (Free Router)</span>
+      <span class="pb-caret">▾</span>
+    </button>
+  </div>
+
+  <section class="log-section">
+    <div class="log-label">
+      <span>// CONVERSATION LOG</span>
+      <button class="log-clear" id="clearBtn">CLEAR</button>
+    </div>
+    <div class="log" id="log">
+      <div class="entry beast">
+        <span class="tag">[BEAST]</span>
+        <span class="msg">Multi-provider AI online. Say "build me a todo app" to generate a complete project, or ask anything else.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Code project notification bar (hidden until code is generated) -->
+  <div class="code-project-bar" id="codeProjectBar" style="display:none">
+    <span class="cpb-icon">📁</span>
+    <div class="cpb-info">
+      <span class="cpb-name" id="cpbName">project</span>
+      <span class="cpb-count" id="cpbCount">0 files</span>
+    </div>
+    <button class="cpb-btn" id="cpbViewBtn">VIEW FILES</button>
+    <button class="cpb-btn cpb-zip" id="cpbZipBtn">ZIP ↓</button>
+  </div>
+
+  <div class="wave" id="wave">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+  </div>
+
+  <div class="transcript">
+    <span class="t-icon">◆</span>
+    <span class="t-text" id="transcript">Awaiting input...</span>
+  </div>
+
+  <div class="input-row">
+    <input class="txt-in" id="txtIn" type="text" placeholder="Ask anything or say 'build me a…'" />
+    <button class="send-btn" id="sendBtn">SEND</button>
+  </div>
+
+  <div class="mic-wrap">
+    <button class="mic-btn" id="micBtn">
+      <span class="ripple"></span><span class="ripple d1"></span>
+      <svg class="mic-icon" viewBox="0 0 24 24" fill="none">
+        <rect x="9" y="1" width="6" height="11" rx="3" fill="currentColor"/>
+        <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="mic-lbl" id="micLbl">TAP TO SPEAK</span>
+    </button>
+  </div>
+
+  <div class="chips">
+    <button class="chip chip-wake" id="wakeChip">🎙 hey beast: OFF</button>
+    <button class="chip chip-code" id="codeChip" style="display:none">📁 Project</button>
+    <button class="chip" data-cmd="what time is it">time?</button>
+    <button class="chip" data-cmd="what is today">date?</button>
+    <button class="chip" data-cmd="open youtube">YouTube</button>
+    <button class="chip" data-cmd="open google">Google</button>
+    <button class="chip" data-cmd="tell me a joke">joke</button>
+    <button class="chip" data-cmd="what can you do">help</button>
+    <button class="chip" data-cmd="stop speaking">stop</button>
+  </div>
+
+  <div class="err-banner" id="errBanner"></div>
+</div>
+
+<!-- ═══ PROVIDER SELECTOR MODAL ════════════════════════════════ -->
+<div class="sel-bg" id="providerSelBg">
+  <div class="sel-sheet" id="providerSheet">
+    <div class="sel-header">
+      <span class="sel-title">// SELECT PROVIDER</span>
+      <button class="sel-close" id="providerSelClose">✕</button>
+    </div>
+    <div class="sel-body" id="providerList"></div>
+  </div>
+</div>
+
+<!-- ═══ MODEL SELECTOR MODAL ═══════════════════════════════════ -->
+<div class="sel-bg" id="modelSelBg">
+  <div class="sel-sheet" id="modelSheet">
+    <div class="sel-header">
+      <span class="sel-title" id="modelSelTitle">// SELECT MODEL</span>
+      <button class="sel-close" id="modelSelClose">✕</button>
+    </div>
+    <div class="sel-body" id="modelList"></div>
+  </div>
+</div>
+
+<!-- ═══ FILE EXPLORER MODAL ════════════════════════════════════ -->
+<div class="fe-bg" id="feModalBg">
+  <div class="fe-sheet">
+    <div class="fe-header">
+      <div>
+        <div class="fe-title">// FILE EXPLORER</div>
+        <div class="fe-project-name" id="feProjectName">📁 project</div>
+      </div>
+      <div class="fe-header-actions">
+        <button class="fe-zip-btn" id="feZipBtn">📥 ZIP</button>
+        <button class="sel-close" id="feClose">✕</button>
+      </div>
+    </div>
+    <!-- File tree -->
+    <div class="fe-tree" id="feTree"></div>
+    <!-- Code preview -->
+    <div class="fe-preview">
+      <div class="fe-preview-header" id="fePreviewHeader">— select a file —</div>
+      <div class="fe-code-wrap" id="feCodeWrap">
+        <pre class="fe-code" id="feCode"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ API KEYS MODAL ══════════════════════════════════════════ -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="m-title">// API KEYS CONFIG</div>
+
+    <div class="m-section">
+      <div class="m-prov-header">
+        <span class="m-label">OPENROUTER</span>
+        <span class="m-prov-badge or-badge">PRIMARY</span>
+        <div class="s-dot" id="apiOrDot"></div>
+      </div>
+      <div class="m-priority">★ Up to 5 keys — auto-rotates on daily limit</div>
+      <div class="m-desc">200+ models. Free tier available.<br><strong>openrouter.ai/settings/keys</strong></div>
+      <input class="m-input" id="orKey1" type="password" placeholder="Key 1 — sk-or-v1-..." style="margin-bottom:5px"/>
+      <input class="m-input" id="orKey2" type="password" placeholder="Key 2 — sk-or-v1-..." style="margin-bottom:5px"/>
+      <input class="m-input" id="orKey3" type="password" placeholder="Key 3 — sk-or-v1-..." style="margin-bottom:5px"/>
+      <input class="m-input" id="orKey4" type="password" placeholder="Key 4 — sk-or-v1-..." style="margin-bottom:5px"/>
+      <input class="m-input" id="orKey5" type="password" placeholder="Key 5 — sk-or-v1-..."/>
+    </div>
+    <hr class="m-hr"/>
+
+    <div class="m-section">
+      <div class="m-prov-header">
+        <span class="m-label" style="color:var(--accent5)">GEMINI</span>
+        <span class="m-prov-badge gem-badge">NATIVE API</span>
+        <div class="s-dot" id="apiGemDot"></div>
+      </div>
+      <div class="m-desc">Google's Gemini — direct native integration.<br><strong>aistudio.google.com/app/apikey</strong></div>
+      <input class="m-input" id="gemKey" type="password" placeholder="AIza..."/>
+    </div>
+    <hr class="m-hr"/>
+
+    <div class="m-section">
+      <div class="m-prov-header">
+        <span class="m-label" style="color:var(--accent4)">GROQ</span>
+        <span class="m-prov-badge groq-badge">ULTRA-FAST</span>
+        <div class="s-dot" id="apiGroqDot"></div>
+      </div>
+      <div class="m-desc">Free tier Llama & Mixtral — fastest inference.<br><strong>console.groq.com</strong> → API Keys</div>
+      <input class="m-input" id="groqKey" type="password" placeholder="gsk_..."/>
+    </div>
+    <hr class="m-hr"/>
+
+    <div class="m-section">
+      <div class="m-prov-header">
+        <span class="m-label" style="color:var(--accent3)">HUGGINGFACE</span>
+        <span class="m-prov-badge hf-badge">OPEN SOURCE</span>
+        <div class="s-dot" id="apiHfDot"></div>
+      </div>
+      <div class="m-desc">100% free open-source models.<br><strong>huggingface.co/settings/tokens</strong></div>
+      <input class="m-input" id="hfKey" type="password" placeholder="hf_..."/>
+    </div>
+    <hr class="m-hr"/>
+
+    <div class="m-desc" style="text-align:center">Keys saved locally only — never sent anywhere except their respective API endpoints.</div>
+    <div class="m-row">
+      <button class="m-btn m-btn-cancel" id="modalCancel">CANCEL</button>
+      <button class="m-btn m-btn-ok"     id="modalSave">SAVE KEYS</button>
+    </div>
+  </div>
+</div>
+
+<script src="providerManager.js?v=20250604-004"></script>
+<script src="modelManager.js?v=20250604-004"></script>
+<script src="aiServiceManager.js?v=20250604-004"></script>
+<script src="codeGenManager.js?v=20250604-004"></script>
+<script src="script.js?v=20250604-004"></script>
+</body>
+</html>

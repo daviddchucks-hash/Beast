@@ -1,0 +1,33 @@
+{
+  "name": "Beast AI",
+  "short_name": "Beast AI",
+  "description": "Beast AI — voice and text assistant powered by OpenRouter",
+  "start_url": "/Beast/",
+  "scope": "/Beast/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020408",
+  "theme_color": "#00ffc8",
+  "icons": [
+    {
+      "src": "public/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "public/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "public/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "en-US"
+}
