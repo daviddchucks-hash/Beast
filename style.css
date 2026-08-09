@@ -69,6 +69,10 @@ img { display: block; max-width: 100%; }
 .chevron { color: #8c8c8c; font-size: 1rem; }
 .header-actions { display: flex; gap: 4px; }
 .header-actions .icon-button { color: #aaa; font-size: 1.05rem; }
+.connection-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; margin-right: 10px; color: #8d8d8d; font-size: .7rem; }
+.connection-status i { width: 7px; height: 7px; display: inline-block; border-radius: 50%; background: #d6a54d; box-shadow: 0 0 0 3px rgba(214, 165, 77, .13); }
+.connection-status.connected i { background: #63c174; box-shadow: 0 0 0 3px rgba(99, 193, 116, .13); }
+.connection-status.fallback i { background: #d6a54d; box-shadow: 0 0 0 3px rgba(214, 165, 77, .13); }
 
 .conversation { width: min(100% - 48px, 820px); flex: 1; margin: 0 auto; padding: 60px 0 30px; }
 .welcome-state { display: flex; min-height: 100%; flex-direction: column; align-items: center; justify-content: center; padding: 5vh 0 4vh; text-align: center; }
@@ -144,7 +148,42 @@ img { display: block; max-width: 100%; }
 }
 @media (max-width: 420px) {
   .model-badge { display: none; }
+  .connection-status { display: none; }
   .welcome-state h1 { font-size: 1.45rem; }
   .welcome-state > p { font-size: .84rem; }
   .message { gap: 10px; }
 }
+
+body.light-mode {
+  --sidebar: #f7f7f8;
+  --sidebar-hover: #e8e8eb;
+  --sidebar-muted: #65656b;
+  --canvas: #fff;
+  --canvas-soft: #f4f4f5;
+  --canvas-raised: #fff;
+  --text: #252525;
+  --muted: #6c6c72;
+  --border: rgba(0, 0, 0, .12);
+}
+body.light-mode .brand,
+body.light-mode .new-chat,
+body.light-mode .model-picker,
+body.light-mode .welcome-state h1,
+body.light-mode .prompt-card { color: #252525; }
+body.light-mode .history-item,
+body.light-mode .sidebar-link { color: #505056; }
+body.light-mode .history-item:hover,
+body.light-mode .history-item.selected,
+body.light-mode .sidebar-link:hover,
+body.light-mode .new-chat:hover { color: #202024; }
+body.light-mode .welcome-state > p,
+body.light-mode .prompt-card small,
+body.light-mode .message-label,
+body.light-mode .composer-note { color: #77777e; }
+body.light-mode .message-body { color: #303036; }
+body.light-mode .message + .message { border-color: rgba(0, 0, 0, .08); }
+body.light-mode .composer textarea { color: #252525; }
+body.light-mode .composer textarea::placeholder { color: #88888f; }
+body.light-mode .send-button:not(:disabled) { background: #252525; color: #fff; }
+body.light-mode .sidebar-bottom,
+body.light-mode .user-card { border-color: rgba(0, 0, 0, .1); }

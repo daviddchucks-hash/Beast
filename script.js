@@ -10,7 +10,10 @@
   var sidebar = document.getElementById('sidebar');
   var sidebarScrim = document.getElementById('sidebar-scrim');
   var toast = document.getElementById('toast');
+  var connectionStatus = document.getElementById('connection-status');
   var responseTimer;
+  var activeRequest = null;
+  var chatMessages = [];
 
   function showToast(message) {
     toast.textContent = message;
@@ -19,6 +22,11 @@
     showToast.timer = window.setTimeout(function () {
       toast.classList.remove('visible');
     }, 2600);
+  }
+
+  function setConnectionStatus(state, label) {
+    connectionStatus.className = 'connection-status ' + state;
+    connectionStatus.innerHTML = '<i></i> ' + label;
   }
 
   function toggleSidebar(open) {
@@ -34,17 +42,17 @@
   function updateComposer() {
     var length = input.value.length;
     charCount.textContent = length + ' / 4000';
-    sendButton.disabled = input.value.trim().length === 0;
+    sendButton.disabled = input.value.trim().length === 0 || Boolean(activeRequest);
     resizeInput();
   }
 
   function responseFor(prompt) {
     var lower = prompt.toLowerCase();
     if (lower.indexOf('plan') !== -1 || lower.indexOf('day') !== -1) {
-      return 'Here is a simple way to make the day feel more intentional:\\n\\n1. Choose one outcome that would make today feel successful.\\n2. Block a quiet 60–90 minute focus window for it.\\n3. Group small tasks into one short admin block.\\n4. Leave a little space between commitments so the plan can breathe.\\n\\nStart with the smallest visible step. Momentum usually follows clarity.';
+      return 'Here is a simple way to make the day feel more intentional:\n\n1. Choose one outcome that would make today feel successful.\n2. Block a quiet 60–90 minute focus window for it.\n3. Group small tasks into one short admin block.\n4. Leave a little space between commitments so the plan can breathe.\n\nStart with the smallest visible step. Momentum usually follows clarity.';
     }
     if (lower.indexOf('idea') !== -1 || lower.indexOf('project') !== -1) {
-      return 'Let’s explore it together. A good first pass is to list the audience, the problem they keep running into, and the smallest useful version of the solution.\\n\\nFrom there, we can compare a few directions by effort, usefulness, and what would make the project distinct.';
+      return 'Let’s explore it together. A good first pass is to list the audience, the problem they keep running into, and the smallest useful version of the solution.\n\nFrom there, we can compare a few directions by effort, usefulness, and what would make the project distinct.';
     }
     if (lower.indexOf('explain') !== -1 || lower.indexOf('learn') !== -1) {
       return 'Absolutely. I’ll keep it clear and build from the basics first. Tell me the topic you want to understand, how familiar you are with it, and whether you prefer an analogy, an example, or a step-by-step explanation.';
@@ -88,57 +96,107 @@
     return message;
   }
 
-  function sendMessage(text) {
+  function askLocal(prompt) {
+    return new Promise(function (resolve) {
+      window.clearTimeout(responseTimer);
+      responseTimer = window.setTimeout(function () {
+        resolve(responseFor(prompt));
+      }, 500);
+    });
+  }
+
+  async function askAssistant() {
+    var controller = new AbortController();
+    var timeout = window.setTimeout(function () { controller.abort(); }, 30000);
+    activeRequest = controller;
+    updateComposer();
+
+    try {
+      var response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: chatMessages,
+          deepThinking: document.getElementById('deep-think').classList.contains('active')
+        }),
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error('AI endpoint unavailable');
+      var data = await response.json();
+      if (!data.reply) throw new Error('Empty AI response');
+      setConnectionStatus(data.provider === 'openai' ? 'connected' : 'fallback', data.provider === 'openai' ? 'Connected' : 'Local fallback');
+      return data.reply;
+    } catch (error) {
+      setConnectionStatus('fallback', 'Local fallback');
+      showToast('AI connection unavailable — using local fallback');
+      return askLocal(chatMessages[chatMessages.length - 1].content);
+    } finally {
+      window.clearTimeout(timeout);
+      activeRequest = null;
+      updateComposer();
+    }
+  }
+
+  async function sendMessage(text) {
     var prompt = text.trim().slice(0, 4000);
-    if (!prompt) return;
+    if (!prompt || activeRequest) return;
     input.value = '';
     updateComposer();
     addMessage('user', prompt);
+    chatMessages.push({ role: 'user', content: prompt });
     var typing = showTyping();
-    window.clearTimeout(responseTimer);
-    responseTimer = window.setTimeout(function () {
-      typing.remove();
-      addMessage('assistant', responseFor(prompt));
-    }, 650);
+    var reply = await askAssistant();
+    typing.remove();
+    addMessage('assistant', reply);
+    chatMessages.push({ role: 'assistant', content: reply });
   }
 
-  document.querySelectorAll('.prompt-card').forEach(function (button) {
-    button.addEventListener('click', function () {
-      input.value = button.getAttribute('data-prompt') || '';
-      updateComposer();
-      input.focus();
+  function resetChat() {
+    window.clearTimeout(responseTimer);
+    if (activeRequest) activeRequest.abort();
+    activeRequest = null;
+    chatMessages = [];
+    conversation.innerHTML = '';
+    var freshWelcome = document.createElement('div');
+    freshWelcome.className = 'welcome-state';
+    freshWelcome.innerHTML = '<div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div><h1>How can I help you today?</h1><p>Ask Drexora AI to think, write, plan, or explore with you.</p><div class="prompt-grid"><button class="prompt-card" type="button" data-prompt="Help me plan a focused and productive day"><span class="prompt-icon purple" aria-hidden="true">◷</span><span><strong>Plan my day</strong><small>Create a focused routine</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Give me five creative ideas for a side project"><span class="prompt-icon lime" aria-hidden="true">✦</span><span><strong>Explore ideas</strong><small>Find a fresh direction</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Explain a complex topic in a simple way"><span class="prompt-icon blue" aria-hidden="true">◇</span><span><strong>Learn something</strong><small>Make it easy to understand</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Help me write a clear and thoughtful message"><span class="prompt-icon orange" aria-hidden="true">✎</span><span><strong>Write with me</strong><small>Turn thoughts into words</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button></div>';
+    conversation.appendChild(freshWelcome);
+    welcomeState = freshWelcome;
+    bindPromptCards();
+    updateComposer();
+    showToast('Started a new chat');
+    toggleSidebar(false);
+  }
+
+  function bindPromptCards() {
+    document.querySelectorAll('.prompt-card').forEach(function (button) {
+      button.addEventListener('click', function () {
+        input.value = button.getAttribute('data-prompt') || '';
+        updateComposer();
+        input.focus();
+      });
     });
-  });
+  }
+
+  bindPromptCards();
 
   document.querySelectorAll('.history-item').forEach(function (button) {
     button.addEventListener('click', function () {
       document.querySelectorAll('.history-item').forEach(function (item) { item.classList.remove('selected'); });
       button.classList.add('selected');
-      showToast('Opened “' + button.getAttribute('data-chat') + '”');
+      showToast('Chat history will be connected to your account soon');
       toggleSidebar(false);
     });
   });
 
-  document.getElementById('new-chat').addEventListener('click', function () {
-    window.clearTimeout(responseTimer);
-    conversation.innerHTML = '';
-    var freshWelcome = document.createElement('div');
-    freshWelcome.className = 'welcome-state';
-    freshWelcome.innerHTML = '<div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div><h1>How can I help you today?</h1><p>Ask Drexora AI to think, write, plan, or explore with you.</p>';
-    conversation.appendChild(freshWelcome);
-    showToast('Started a new chat');
-    toggleSidebar(false);
-  });
-
+  document.getElementById('new-chat').addEventListener('click', resetChat);
   document.getElementById('clear-history').addEventListener('click', function (event) {
     event.preventDefault();
     showToast('Your local chat list is ready to clear');
   });
-
   document.getElementById('sidebar-open').addEventListener('click', function () { toggleSidebar(true); });
   document.getElementById('sidebar-close').addEventListener('click', function () { toggleSidebar(false); });
   sidebarScrim.addEventListener('click', function () { toggleSidebar(false); });
-
   document.getElementById('share-chat').addEventListener('click', function () {
     showToast('Sharing will be available when a chat is connected');
   });
@@ -163,7 +221,6 @@
     event.preventDefault();
     sendMessage(input.value);
   });
-
   document.addEventListener('keydown', function (event) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
@@ -171,4 +228,5 @@
     }
     if (event.key === 'Escape') toggleSidebar(false);
   });
+  updateComposer();
 })();

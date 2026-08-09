@@ -1,0 +1,1 @@
+- [Drexora AI provider boundary](drexora-ai-provider.md) — keep provider credentials server-side; the browser talks only to the chat endpoint and retains a local fallback.
