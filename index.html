@@ -3,103 +3,114 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Drexora Guard — Protect your PC quietly</title>
-    <meta name="description" content="Drexora Guard is a lightweight Windows desktop security application built to help you monitor and protect your system.">
-    <meta name="robots" content="index, follow">
-    <meta property="og:title" content="Drexora Guard">
-    <meta property="og:description" content="A quiet, trustworthy utility for monitoring and protecting your Windows PC.">
-    <meta property="og:type" content="website">
+    <title>Drexora AI</title>
+    <meta name="description" content="Drexora AI — a focused, private-feeling AI chat workspace.">
+    <meta name="theme-color" content="#212121">
     <link rel="icon" type="image/png" href="assets/drexora-mark.png">
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <div class="topbar"><strong>Windows desktop security</strong><span aria-hidden="true">•</span>Built to watch quietly</div>
-    <header class="nav">
-      <div class="container nav-inner">
-        <a class="brand" href="index.html" aria-label="Drexora Guard home"><img class="brand-mark" src="assets/drexora-mark.png" alt="">Drexora Guard</a>
-        <nav class="nav-links" aria-label="Primary navigation">
-          <a class="nav-link active" href="index.html">Home</a>
-          <a class="nav-link" href="index.html#features">Features</a>
-          <a class="nav-link" href="index.html#requirements">Requirements</a>
-          <a class="nav-link" href="download.html">Download</a>
-        </nav>
-        <a class="button nav-cta" href="download.html">Get Drexora <span aria-hidden="true">→</span></a>
-        <button class="mobile-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu"><span></span><span></span><span></span></button>
-      </div>
-      <nav class="mobile-panel container" id="mobile-menu" aria-label="Mobile navigation">
-        <a href="index.html">Home</a>
-        <a href="index.html#features">Features</a>
-        <a href="index.html#requirements">Requirements</a>
-        <a href="download.html">Download for Windows <span aria-hidden="true">→</span></a>
-      </nav>
-    </header>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Chat history">
+        <div class="sidebar-top">
+          <a class="brand" href="index.html" aria-label="Drexora AI home">
+            <span class="brand-mark"><img src="assets/drexora-mark.png" alt=""></span>
+            <span>Drexora AI</span>
+          </a>
+          <button class="icon-button sidebar-close" id="sidebar-close" type="button" aria-label="Close sidebar">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
 
-    <main>
-      <section class="hero">
-        <div class="container hero-grid">
-          <div class="hero-copy">
-            <div class="eyebrow">Now available for Windows</div>
-            <h1>Protection that <em>stays</em> out of the way.</h1>
-            <p class="hero-lede">Drexora Guard is a desktop security application built to help you monitor and protect your system — straightforward, lightweight, and made to run quietly in the background.</p>
-            <div class="hero-actions">
-              <a class="button large" href="download.html">Download for Windows <span aria-hidden="true">↓</span></a>
-              <a class="button outline large" href="#features">See features <span aria-hidden="true">→</span></a>
-            </div>
-            <div class="hero-meta"><span>Free download</span><span>Windows 10 &amp; 11</span><span>Version 1.0</span></div>
-          </div>
-          <div class="hero-visual" aria-label="Drexora Guard protection status illustration">
-            <div class="visual-halo"></div><div class="shield-orbit"></div>
-            <div class="shield-card"><img src="assets/drexora-mark.png" alt=""><strong>System watched</strong><span class="check" aria-hidden="true">✓</span></div>
-            <div class="telemetry">
-              <div class="telemetry-label"><span>Guard status</span><span>Live</span></div>
-              <div class="telemetry-value">Quiet &amp; steady</div>
-              <div class="telemetry-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            </div>
+        <button class="new-chat" id="new-chat" type="button">
+          <span class="new-chat-icon" aria-hidden="true">＋</span>
+          <span>New chat</span>
+          <span class="shortcut">⌘ K</span>
+        </button>
+
+        <div class="history" id="history">
+          <p class="history-label">Today</p>
+          <button class="history-item selected" type="button" data-chat="Welcome to Drexora AI">
+            <span class="history-icon" aria-hidden="true">◌</span>
+            <span>Welcome to Drexora AI</span>
+          </button>
+          <button class="history-item" type="button" data-chat="Ideas for a better morning">
+            <span class="history-icon" aria-hidden="true">◌</span>
+            <span>Ideas for a better morning</span>
+          </button>
+          <p class="history-label older">Previous 7 days</p>
+          <button class="history-item" type="button" data-chat="Plan my next project">
+            <span class="history-icon" aria-hidden="true">◌</span>
+            <span>Plan my next project</span>
+          </button>
+          <button class="history-item" type="button" data-chat="Explain quantum computing">
+            <span class="history-icon" aria-hidden="true">◌</span>
+            <span>Explain quantum computing</span>
+          </button>
+        </div>
+
+        <div class="sidebar-bottom">
+          <a class="sidebar-link" href="#" id="clear-history"><span class="sidebar-link-icon" aria-hidden="true">⌫</span> Clear conversations</a>
+          <a class="sidebar-link" href="mailto:drexxora@yahoo.com"><span class="sidebar-link-icon" aria-hidden="true">?</span> Help &amp; feedback</a>
+          <div class="user-card">
+            <span class="avatar">D</span>
+            <span class="user-copy"><strong>Drexora user</strong><small>Personal workspace</small></span>
+            <button class="icon-button more-button" type="button" aria-label="More account options">•••</button>
           </div>
         </div>
-      </section>
+      </aside>
 
-      <section class="section" id="features">
-        <div class="container">
-          <div class="section-heading"><div class="eyebrow">What it does</div><h2>A clear view of your system, without the noise.</h2><p>Drexora Guard is designed around one job: helping you monitor and protect your computer, without getting in your way.</p></div>
-          <div class="feature-layout">
-            <div class="feature-aside"><div class="feature-aside-number">04</div><p>Focused tools for the moments when you want to know your PC is in good hands.</p></div>
-            <div class="feature-grid">
-              <article class="feature-card"><span class="feature-icon" aria-hidden="true">⌁</span><h3>System monitoring</h3><p>Keeps an eye on your system so you have a clearer picture of what’s happening on your PC.</p></article>
-              <article class="feature-card featured"><span class="feature-icon" aria-hidden="true">◇</span><h3>Protection tools</h3><p>Practical protection features aimed at helping safeguard your system from common risks.</p></article>
-              <article class="feature-card"><span class="feature-icon" aria-hidden="true">ϟ</span><h3>Lightweight</h3><p>Built to run on your desktop without weighing your system down.</p></article>
-              <article class="feature-card"><span class="feature-icon" aria-hidden="true">◷</span><h3>Simple to use</h3><p>A clean, straightforward interface so protecting your PC doesn’t need to be complicated.</p></article>
+      <div class="sidebar-scrim" id="sidebar-scrim"></div>
+
+      <main class="chat-area">
+        <header class="chat-header">
+          <button class="icon-button menu-button" id="sidebar-open" type="button" aria-label="Open sidebar">
+            <span aria-hidden="true">☰</span>
+          </button>
+          <button class="model-picker" type="button" aria-label="Choose model">
+            <span>Drexora AI</span>
+            <span class="model-badge">Standard</span>
+            <span class="chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="header-actions">
+            <button class="icon-button" type="button" id="share-chat" aria-label="Share chat"><span aria-hidden="true">↗</span></button>
+            <button class="icon-button" type="button" id="toggle-theme" aria-label="Toggle theme"><span aria-hidden="true">☼</span></button>
+          </div>
+        </header>
+
+        <section class="conversation" id="conversation" aria-live="polite">
+          <div class="welcome-state" id="welcome-state">
+            <div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div>
+            <h1>How can I help you today?</h1>
+            <p>Ask Drexora AI to think, write, plan, or explore with you.</p>
+            <div class="prompt-grid">
+              <button class="prompt-card" type="button" data-prompt="Help me plan a focused and productive day"><span class="prompt-icon purple" aria-hidden="true">◷</span><span><strong>Plan my day</strong><small>Create a focused routine</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
+              <button class="prompt-card" type="button" data-prompt="Give me five creative ideas for a side project"><span class="prompt-icon lime" aria-hidden="true">✦</span><span><strong>Explore ideas</strong><small>Find a fresh direction</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
+              <button class="prompt-card" type="button" data-prompt="Explain a complex topic in a simple way"><span class="prompt-icon blue" aria-hidden="true">◇</span><span><strong>Learn something</strong><small>Make it easy to understand</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
+              <button class="prompt-card" type="button" data-prompt="Help me write a clear and thoughtful message"><span class="prompt-icon orange" aria-hidden="true">✎</span><span><strong>Write with me</strong><small>Turn thoughts into words</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
             </div>
           </div>
-          <div class="signal-strip"><span><b></b>Quiet by design</span><span><b></b>Made for Windows</span><span><b></b>Straightforward controls</span><span><b></b>No distractions</span></div>
-        </div>
-      </section>
+        </section>
 
-      <section class="section tint" id="requirements">
-        <div class="container requirements-layout">
-          <div class="section-heading"><div class="eyebrow">Before you install</div><h2>Ready for your everyday PC.</h2><p>Drexora Guard keeps its footprint sensible so you can get on with the work, play, and life happening on your computer.</p></div>
-          <div>
-            <div class="requirements-table">
-              <div class="requirement-row"><strong>Operating system</strong><span>Windows 10 or Windows 11 (64-bit)</span></div>
-              <div class="requirement-row"><strong>Disk space</strong><span>200 MB free space minimum</span></div>
-              <div class="requirement-row"><strong>Memory</strong><span>4 GB RAM recommended</span></div>
-              <div class="requirement-row"><strong>Internet</strong><span>Required for installation and updates</span></div>
+        <div class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea id="prompt-input" rows="1" placeholder="Message Drexora AI" aria-label="Message Drexora AI"></textarea>
+            <div class="composer-toolbar">
+              <div class="composer-tools">
+                <button class="composer-tool" type="button" id="attach-file" aria-label="Attach a file"><span aria-hidden="true">＋</span><span>Attach</span></button>
+                <button class="composer-tool" type="button" id="deep-think" aria-label="Toggle deep thinking"><span aria-hidden="true">✧</span><span>Think</span></button>
+              </div>
+              <div class="composer-actions">
+                <span class="char-count" id="char-count">0 / 4000</span>
+                <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled><span aria-hidden="true">↑</span></button>
+              </div>
             </div>
-            <div class="requirements-foot"><p>Version 1.0 · Free to download</p><a class="button" href="download.html">Go to download <span aria-hidden="true">→</span></a></div>
-          </div>
+          </form>
+          <p class="composer-note">Drexora AI can make mistakes. Check important information.</p>
         </div>
-      </section>
-      <section class="cta-band"><div class="container cta-layout"><div><h2>One less thing to worry about.</h2><p>Download Drexora Guard and get it running in a few minutes.</p></div><a class="button light large" href="download.html">Download Drexora Guard <span aria-hidden="true">↓</span></a></div></section>
-    </main>
-
-    <footer class="footer">
-      <div class="container footer-grid">
-        <div><a class="brand" href="index.html"><img class="brand-mark" src="assets/drexora-mark.png" alt="">Drexora Guard</a><p class="footer-copy">Security software for your desktop. A calm, practical layer of visibility for your Windows PC.</p></div>
-        <div class="footer-col"><h4>Explore</h4><a href="index.html">Home</a><a href="index.html#features">Features</a><a href="index.html#requirements">Requirements</a><a href="download.html">Download</a></div>
-        <div class="footer-col"><h4>Contact</h4><a href="mailto:drexxora@yahoo.com">drexxora@yahoo.com</a><a href="https://wa.me/2349036895700" target="_blank" rel="noreferrer">+234 903 689 5700</a><a href="https://drexora.name.ng" target="_blank" rel="noreferrer">drexora.name.ng</a></div>
-      </div>
-      <div class="container footer-bottom"><span>© <span data-year></span> Drexora Guard. All rights reserved.</span><span>Proudly made by Drexora</span></div>
-    </footer>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="script.js"></script>
   </body>
 </html>

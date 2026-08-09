@@ -1,37 +1,174 @@
 (function () {
   'use strict';
 
-  document.querySelectorAll('[data-year]').forEach(function (element) {
-    element.textContent = String(new Date().getFullYear());
+  var input = document.getElementById('prompt-input');
+  var composer = document.getElementById('composer');
+  var sendButton = document.getElementById('send-button');
+  var charCount = document.getElementById('char-count');
+  var conversation = document.getElementById('conversation');
+  var welcomeState = document.getElementById('welcome-state');
+  var sidebar = document.getElementById('sidebar');
+  var sidebarScrim = document.getElementById('sidebar-scrim');
+  var toast = document.getElementById('toast');
+  var responseTimer;
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add('visible');
+    window.clearTimeout(showToast.timer);
+    showToast.timer = window.setTimeout(function () {
+      toast.classList.remove('visible');
+    }, 2600);
+  }
+
+  function toggleSidebar(open) {
+    sidebar.classList.toggle('open', open);
+    sidebarScrim.classList.toggle('open', open);
+  }
+
+  function resizeInput() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 190) + 'px';
+  }
+
+  function updateComposer() {
+    var length = input.value.length;
+    charCount.textContent = length + ' / 4000';
+    sendButton.disabled = input.value.trim().length === 0;
+    resizeInput();
+  }
+
+  function responseFor(prompt) {
+    var lower = prompt.toLowerCase();
+    if (lower.indexOf('plan') !== -1 || lower.indexOf('day') !== -1) {
+      return 'Here is a simple way to make the day feel more intentional:\\n\\n1. Choose one outcome that would make today feel successful.\\n2. Block a quiet 60–90 minute focus window for it.\\n3. Group small tasks into one short admin block.\\n4. Leave a little space between commitments so the plan can breathe.\\n\\nStart with the smallest visible step. Momentum usually follows clarity.';
+    }
+    if (lower.indexOf('idea') !== -1 || lower.indexOf('project') !== -1) {
+      return 'Let’s explore it together. A good first pass is to list the audience, the problem they keep running into, and the smallest useful version of the solution.\\n\\nFrom there, we can compare a few directions by effort, usefulness, and what would make the project distinct.';
+    }
+    if (lower.indexOf('explain') !== -1 || lower.indexOf('learn') !== -1) {
+      return 'Absolutely. I’ll keep it clear and build from the basics first. Tell me the topic you want to understand, how familiar you are with it, and whether you prefer an analogy, an example, or a step-by-step explanation.';
+    }
+    if (lower.indexOf('write') !== -1 || lower.indexOf('message') !== -1) {
+      return 'I can help shape that. Share the rough version, who it is for, and the tone you want — concise, warm, professional, direct, or something else. I’ll turn it into a clear draft while keeping your voice.';
+    }
+    return 'That’s a thoughtful question. I can help you break it down, compare options, draft something, or turn the idea into a practical next step. What outcome would be most useful to you?';
+  }
+
+  function addMessage(role, text) {
+    if (welcomeState) {
+      welcomeState.remove();
+      welcomeState = null;
+    }
+    var list = conversation.querySelector('.message-list');
+    if (!list) {
+      list = document.createElement('div');
+      list.className = 'message-list';
+      conversation.appendChild(list);
+    }
+    var message = document.createElement('article');
+    message.className = 'message ' + role;
+    var avatar = role === 'assistant'
+      ? '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span>'
+      : '<span class="message-avatar">You</span>';
+    var label = role === 'assistant' ? 'Drexora AI' : 'You';
+    message.innerHTML = avatar + '<div class="message-body"><span class="message-label">' + label + '</span><p></p></div>';
+    message.querySelector('p').textContent = text;
+    list.appendChild(message);
+    message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function showTyping() {
+    var list = conversation.querySelector('.message-list');
+    var message = document.createElement('article');
+    message.className = 'message assistant typing-message';
+    message.innerHTML = '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span><div class="message-body"><span class="message-label">Drexora AI</span><span class="typing-dots"><i></i><i></i><i></i></span></div>';
+    list.appendChild(message);
+    message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return message;
+  }
+
+  function sendMessage(text) {
+    var prompt = text.trim().slice(0, 4000);
+    if (!prompt) return;
+    input.value = '';
+    updateComposer();
+    addMessage('user', prompt);
+    var typing = showTyping();
+    window.clearTimeout(responseTimer);
+    responseTimer = window.setTimeout(function () {
+      typing.remove();
+      addMessage('assistant', responseFor(prompt));
+    }, 650);
+  }
+
+  document.querySelectorAll('.prompt-card').forEach(function (button) {
+    button.addEventListener('click', function () {
+      input.value = button.getAttribute('data-prompt') || '';
+      updateComposer();
+      input.focus();
+    });
   });
 
-  var toggle = document.querySelector('.mobile-toggle');
-  var menu = document.querySelector('.mobile-panel');
-  if (toggle && menu) {
-    toggle.addEventListener('click', function () {
-      var open = menu.classList.toggle('open');
-      toggle.classList.toggle('open', open);
-      toggle.setAttribute('aria-expanded', String(open));
-      toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  document.querySelectorAll('.history-item').forEach(function (button) {
+    button.addEventListener('click', function () {
+      document.querySelectorAll('.history-item').forEach(function (item) { item.classList.remove('selected'); });
+      button.classList.add('selected');
+      showToast('Opened “' + button.getAttribute('data-chat') + '”');
+      toggleSidebar(false);
     });
-    menu.querySelectorAll('a').forEach(function (link) {
-      link.addEventListener('click', function () {
-        menu.classList.remove('open');
-        toggle.classList.remove('open');
-        toggle.setAttribute('aria-expanded', 'false');
-        toggle.setAttribute('aria-label', 'Open menu');
-      });
-    });
-  }
+  });
 
-  var downloadButton = document.querySelector('.download-button');
-  var downloadMessage = document.querySelector('.download-message');
-  if (downloadButton && downloadMessage) {
-    downloadButton.addEventListener('click', function () {
-      downloadMessage.hidden = false;
-      downloadButton.classList.add('is-clicked');
-      downloadButton.setAttribute('aria-describedby', 'download-message');
-    });
-    downloadMessage.id = 'download-message';
-  }
+  document.getElementById('new-chat').addEventListener('click', function () {
+    window.clearTimeout(responseTimer);
+    conversation.innerHTML = '';
+    var freshWelcome = document.createElement('div');
+    freshWelcome.className = 'welcome-state';
+    freshWelcome.innerHTML = '<div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div><h1>How can I help you today?</h1><p>Ask Drexora AI to think, write, plan, or explore with you.</p>';
+    conversation.appendChild(freshWelcome);
+    showToast('Started a new chat');
+    toggleSidebar(false);
+  });
+
+  document.getElementById('clear-history').addEventListener('click', function (event) {
+    event.preventDefault();
+    showToast('Your local chat list is ready to clear');
+  });
+
+  document.getElementById('sidebar-open').addEventListener('click', function () { toggleSidebar(true); });
+  document.getElementById('sidebar-close').addEventListener('click', function () { toggleSidebar(false); });
+  sidebarScrim.addEventListener('click', function () { toggleSidebar(false); });
+
+  document.getElementById('share-chat').addEventListener('click', function () {
+    showToast('Sharing will be available when a chat is connected');
+  });
+  document.getElementById('toggle-theme').addEventListener('click', function () {
+    document.body.classList.toggle('light-mode');
+    showToast(document.body.classList.contains('light-mode') ? 'Light mode on' : 'Dark mode on');
+  });
+  document.getElementById('attach-file').addEventListener('click', function () { showToast('File attachments are coming soon'); });
+  document.getElementById('deep-think').addEventListener('click', function () {
+    this.classList.toggle('active');
+    showToast(this.classList.contains('active') ? 'Deep thinking on' : 'Deep thinking off');
+  });
+
+  input.addEventListener('input', updateComposer);
+  input.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage(input.value);
+    }
+  });
+  composer.addEventListener('submit', function (event) {
+    event.preventDefault();
+    sendMessage(input.value);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      document.getElementById('new-chat').click();
+    }
+    if (event.key === 'Escape') toggleSidebar(false);
+  });
 })();
