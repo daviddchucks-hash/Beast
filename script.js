@@ -100,13 +100,17 @@
     'deepseek/deepseek-chat-v3-0324:free',
     'google/gemma-4-31b-it:free',
     'nvidia/nemotron-3-super-120b-a12b:free',
+    'nvidia/nemotron-3-nano-30b-a3b:free',
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    'nvidia/nemotron-3-ultra-550b-a55b:free',
     'openai/gpt-oss-120b:free',
     'openai/gpt-oss-20b:free',
+    'cohere/north-mini-code:free',
+    'poolside/laguna-m.1:free',
+    'poolside/laguna-xs-2.1:free',
     'qwen/qwen3-next-80b-a3b-instruct:free'
   ];
   var GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
     'gemini-3.1-flash-lite',
     'gemini-3.6-flash'
   ];

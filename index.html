@@ -54,12 +54,6 @@
             <button class="provider-tab active" type="button" data-provider="openrouter">OpenRouter</button>
             <button class="provider-tab" type="button" data-provider="gemini">Gemini</button>
           </div>
-          <button class="model-picker" id="model-picker" type="button" aria-label="Choose model">
-            <span id="model-picker-label">Drexora AI</span>
-            <span class="model-badge" id="model-badge">Select model</span>
-            <span class="chevron" aria-hidden="true">⌄</span>
-          </button>
-          <div id="model-menu" class="model-menu" aria-hidden="true"></div>
           <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Checking...</span>
           <div class="header-actions">
             <button class="icon-button" type="button" id="regenerate" aria-label="Regenerate"><span aria-hidden="true">⟲</span></button>
@@ -84,11 +78,17 @@
         </section>
 
         <div class="composer-wrap">
+          <div id="model-menu" class="model-menu" aria-hidden="true"></div>
           <form class="composer" id="composer">
             <textarea id="prompt-input" rows="1" placeholder="Message Drexora AI" aria-label="Message Drexora AI"></textarea>
             <div class="composer-toolbar">
               <div class="composer-tools">
                 <button class="composer-tool" type="button" id="attach-file" aria-label="Attach a file"><span aria-hidden="true">＋</span><span>Attach</span></button>
+                <button class="composer-tool model-picker" id="model-picker" type="button" aria-label="Choose model">
+                  <span aria-hidden="true">◆</span>
+                  <span class="model-badge" id="model-badge">Select model</span>
+                  <span class="chevron" aria-hidden="true">⌄</span>
+                </button>
                 <button class="composer-tool" type="button" id="deep-think" aria-label="Toggle deep thinking"><span aria-hidden="true">✧</span><span>Think</span></button>
               </div>
               <div class="composer-actions">
