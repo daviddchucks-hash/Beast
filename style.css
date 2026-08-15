@@ -187,3 +187,32 @@ body.light-mode .composer textarea::placeholder { color: #88888f; }
 body.light-mode .send-button:not(:disabled) { background: #252525; color: #fff; }
 body.light-mode .sidebar-bottom,
 body.light-mode .user-card { border-color: rgba(0, 0, 0, .1); }
+
+/* Auth / modal styles */
+.auth-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); z-index: 60; }
+.auth-modal[aria-hidden="true"] { display: none; }
+.auth-panel { width: 420px; max-width: 94%; background: var(--canvas-raised); border-radius: 12px; padding: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.04); }
+.auth-panel h2 { margin: 0 0 8px; font: 600 1.05rem var(--font-display); }
+.auth-panel label { display: block; margin-top: 8px; color: var(--muted); }
+.auth-panel input { width: 100%; padding: 9px 10px; margin-top: 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.06); background: transparent; color: var(--text); }
+.auth-actions { display:flex; gap:8px; margin-top: 12px; }
+.auth-close { position: absolute; right: 18px; top: 14px; background: transparent; border: 0; font-size: 1.3rem; color: var(--muted); }
+.auth-error { color: #ffb4b4; margin-top: 8px; }
+
+/* Model menu */
+.model-menu { position: absolute; top: 56px; left: 120px; min-width: 180px; background: var(--canvas-raised); border: 1px solid rgba(255,255,255,.06); border-radius: 8px; padding: 6px; display: none; z-index: 40; }
+.model-item { display: block; width: 100%; padding: 8px 10px; text-align: left; color: var(--text); background: transparent; border: 0; border-radius: 6px; margin: 2px 0; }
+.model-item:hover { background: rgba(255,255,255,.03); }
+
+/* Small action buttons inside history items (will be added dynamically) */
+.history-actions { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.history-action { display: inline-grid; width: 28px; height: 28px; place-items: center; border-radius: 6px; color: #9a9a9a; }
+.history-item:hover .history-action { color: #fff; background: rgba(255,255,255,.03); }
+
+/* Memories list */
+#memories-list .memory { padding: 8px; border-bottom: 1px solid rgba(255,255,255,.03); display:flex; justify-content:space-between; gap:8px; }
+#memories-list .memory .content { flex:1; color:var(--text); }
+#memories-list .memory .meta { color:var(--muted); font-size: .8rem; }
+
+/* Header action tweaks */
+.header-actions .icon-button { width: 36px; height: 36px; }

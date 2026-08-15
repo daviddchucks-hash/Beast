@@ -51,6 +51,7 @@
 
         <div class="sidebar-bottom">
           <a class="sidebar-link" href="#" id="clear-history"><span class="sidebar-link-icon" aria-hidden="true">⌫</span> Clear conversations</a>
+          <a class="sidebar-link" href="#" id="open-memories"><span class="sidebar-link-icon" aria-hidden="true">★</span> Memories</a>
           <a class="sidebar-link" href="mailto:drexxora@yahoo.com"><span class="sidebar-link-icon" aria-hidden="true">?</span> Help &amp; feedback</a>
           <div class="user-card">
             <span class="avatar">D</span>
@@ -76,6 +77,8 @@
           <button class="icon-button" id="auth-button" type="button" aria-label="Sign in">Sign in</button>
           <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Local fallback</span>
           <div class="header-actions">
+            <button class="icon-button" type="button" id="regenerate" aria-label="Regenerate"><span aria-hidden="true">⟲</span></button>
+            <button class="icon-button" type="button" id="stop-generation" aria-label="Stop generation" disabled><span aria-hidden="true">■</span></button>
             <button class="icon-button" type="button" id="share-chat" aria-label="Share chat"><span aria-hidden="true">↗</span></button>
             <button class="icon-button" type="button" id="toggle-theme" aria-label="Toggle theme"><span aria-hidden="true">☼</span></button>
           </div>
@@ -146,6 +149,18 @@
           </div>
         </form>
         <div id="auth-error" class="auth-error" aria-live="polite"></div>
+      </div>
+    </div>
+    <!-- Memories modal -->
+    <div id="memories-modal" class="auth-modal" aria-hidden="true">
+      <div class="auth-panel">
+        <button class="auth-close" id="memories-close">×</button>
+        <h2>Memories</h2>
+        <div id="memories-list" style="max-height:400px; overflow:auto; margin-top:10px;"></div>
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button id="memories-clear">Clear memories</button>
+          <button id="memories-refresh">Refresh</button>
+        </div>
       </div>
     </div>
   </body>

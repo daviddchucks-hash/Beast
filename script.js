@@ -32,6 +32,16 @@
   var modelMenu = document.getElementById('model-menu');
   var modelBadge = document.getElementById('model-badge');
   var selectedModel = localStorage.getItem('drexora:model') || null;
+  var historyEl = document.getElementById('history');
+  var currentConversationId = null;
+  var openMemoriesBtn = document.getElementById('open-memories');
+  var memoriesModal = document.getElementById('memories-modal');
+  var memoriesClose = document.getElementById('memories-close');
+  var memoriesList = document.getElementById('memories-list');
+  var memoriesClear = document.getElementById('memories-clear');
+  var memoriesRefresh = document.getElementById('memories-refresh');
+  var regenerateBtn = document.getElementById('regenerate');
+  var stopBtn = document.getElementById('stop-generation');
 
   async function loadModels() {
     try {
@@ -172,7 +182,7 @@
         var response = await fetch('/api/ai/chat', {
           method: 'POST',
           headers: headers,
-          body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active') }),
+          body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
           signal: controller.signal
         });
         if (!response.ok) throw new Error('AI endpoint unavailable');
@@ -194,10 +204,15 @@
   async function askAssistantStream() {
     var headers = { 'Content-Type': 'application/json' };
     if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
+    var controller = new AbortController();
+    activeRequest = controller;
+    if (stopBtn) stopBtn.disabled = false;
+    updateComposer();
     var response = await fetch('/api/ai/chat/stream', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active') })
+      body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
+      signal: controller.signal
     });
     if (!response.ok) throw new Error('Stream endpoint unavailable');
     setConnectionStatus('connected', 'Connected');
@@ -235,6 +250,10 @@
         }
       }
     }
+    // cleanup
+    activeRequest = null;
+    if (stopBtn) stopBtn.disabled = true;
+    updateComposer();
     return finalReply;
   }
 
@@ -290,7 +309,7 @@
       auth.onAuthStateChanged(function (user) {
         currentUser = user;
         if (user) {
-          user.getIdToken().then(function (t) { currentIdToken = t; updateAuthButton(); });
+          user.getIdToken().then(function (t) { currentIdToken = t; updateAuthButton(); if (typeof loadConversations === 'function') loadConversations(); });
         } else {
           currentIdToken = null;
           updateAuthButton();
@@ -366,6 +385,118 @@
 
   initFirebaseAuth();
 
+  // Load conversations when signed in
+  async function loadConversations() {
+    historyEl.innerHTML = '';
+    if (!currentIdToken) return;
+    try {
+      const r = await fetch('/api/conversations', { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const list = data.conversations || [];
+      list.forEach(function (c) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'history-item';
+        btn.setAttribute('data-id', c.id);
+        btn.innerHTML = '<span class="history-icon">◌</span><span class="title">' + (c.title || 'Conversation') + '</span>';
+        const actions = document.createElement('span'); actions.className = 'history-actions';
+        const rename = document.createElement('button'); rename.className = 'history-action'; rename.title = 'Rename'; rename.textContent = '✎';
+        const archive = document.createElement('button'); archive.className = 'history-action'; archive.title = 'Archive'; archive.textContent = '⎘';
+        const del = document.createElement('button'); del.className = 'history-action'; del.title = 'Delete'; del.textContent = '⌫';
+        actions.appendChild(rename); actions.appendChild(archive); actions.appendChild(del);
+        btn.appendChild(actions);
+        btn.addEventListener('click', function (ev) { if (ev.target && ev.target.classList.contains('history-action')) return; loadConversation(c.id); document.querySelectorAll('.history-item').forEach(function (it) { it.classList.remove('selected'); }); btn.classList.add('selected'); toggleSidebar(false); });
+        rename.addEventListener('click', function (ev) { ev.stopPropagation(); const t = prompt('New title', c.title || ''); if (t !== null) { fetch('/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: t }) }).then(function () { loadConversations(); }); } });
+        archive.addEventListener('click', function (ev) { ev.stopPropagation(); fetch('/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ archived: true }) }).then(function () { loadConversations(); }); });
+        del.addEventListener('click', function (ev) { ev.stopPropagation(); if (!confirm('Delete this conversation?')) return; fetch('/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(function () { loadConversations(); if (currentConversationId === c.id) resetChat(); }); });
+        historyEl.appendChild(btn);
+      });
+    } catch (err) { console.warn('Failed to load conversations', err); }
+  }
+
+  async function createConversation() {
+    try {
+      const r = await fetch('/api/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: 'New conversation' }) });
+      if (!r.ok) throw new Error('Failed');
+      const data = await r.json();
+      currentConversationId = data.id;
+      chatMessages = [];
+      conversation.innerHTML = '';
+      updateComposer();
+      loadConversations();
+    } catch (err) { showToast('Failed to create conversation'); }
+  }
+
+  async function loadConversation(id) {
+    try {
+      const r = await fetch('/api/conversations/' + id, { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      if (!r.ok) { showToast('Failed to load conversation'); return; }
+      const data = await r.json();
+      currentConversationId = id;
+      chatMessages = [];
+      conversation.innerHTML = '';
+      const list = document.createElement('div'); list.className = 'message-list';
+      (data.messages || []).forEach(function (m) { const article = document.createElement('article'); article.className = 'message ' + m.role; article.innerHTML = (m.role === 'assistant' ? '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span>' : '<span class="message-avatar">You</span>') + '<div class="message-body"><span class="message-label">' + (m.role === 'assistant' ? 'Drexora AI' : 'You') + '</span><p>' + (m.content || '') + '</p></div>'; list.appendChild(article); chatMessages.push({ role: m.role, content: m.content }); });
+      conversation.appendChild(list);
+    } catch (err) { showToast('Failed to load conversation'); }
+  }
+
+  // Memories UI
+  function openMemories() { if (!memoriesModal) return; memoriesModal.setAttribute('aria-hidden', 'false'); memoriesModal.style.display = 'flex'; fetchMemories(); }
+  function closeMemories() { if (!memoriesModal) return; memoriesModal.setAttribute('aria-hidden', 'true'); memoriesModal.style.display = 'none'; }
+  async function fetchMemories() {
+    if (!currentIdToken) { memoriesList.innerHTML = '<div class="memory">Sign in to view memories</div>'; return; }
+    try {
+      const r = await fetch('/api/memory', { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      if (!r.ok) { memoriesList.innerHTML = '<div class="memory">Failed to load</div>'; return; }
+      const data = await r.json();
+      const mems = data.memories || [];
+      memoriesList.innerHTML = '';
+      mems.forEach(function (m) {
+        const el = document.createElement('div'); el.className = 'memory'; el.innerHTML = '<div class="content">' + (m.content || '') + '</div><div class="meta"><button class="mem-del" data-id="' + m.id + '">Delete</button></div>';
+        memoriesList.appendChild(el);
+      });
+      memoriesList.querySelectorAll('.mem-del').forEach(function (b) { b.addEventListener('click', async function () { const id = b.getAttribute('data-id'); await fetch('/api/memory/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }); fetchMemories(); }); });
+    } catch (err) { memoriesList.innerHTML = '<div class="memory">Error</div>'; }
+  }
+
+  if (openMemoriesBtn) openMemoriesBtn.addEventListener('click', function (ev) { ev.preventDefault(); openMemories(); });
+  if (memoriesClose) memoriesClose.addEventListener('click', closeMemories);
+  if (memoriesClear) memoriesClear.addEventListener('click', function () { if (!confirm('Clear all memories?')) return; fetch('/api/memory', { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(fetchMemories); });
+  if (memoriesRefresh) memoriesRefresh.addEventListener('click', fetchMemories);
+
+  function regenerateLast() {
+    // find last user message
+    for (var i = chatMessages.length - 1; i >= 0; i--) {
+      if (chatMessages[i].role === 'user') {
+        var msg = chatMessages[i].content;
+        // remove any assistant messages after this index
+        chatMessages = chatMessages.slice(0, i + 1);
+        // remove assistant elements from DOM
+        var list = conversation.querySelector('.message-list');
+        if (list) {
+          var nodes = Array.from(list.querySelectorAll('.message'));
+          for (var j = nodes.length - 1; j >= 0; j--) {
+            var n = nodes[j];
+            if (n.classList.contains('assistant')) n.remove();
+            else break;
+          }
+        }
+        sendMessage(msg);
+        return;
+      }
+    }
+    showToast('No user message to regenerate');
+  }
+
+  // reload conversations when auth changes
+  (function watchAuthForConversations() {
+    var orig = firebase && firebase.auth ? firebase.auth() : null;
+    if (!orig) return;
+    orig.onAuthStateChanged(function (u) { currentUser = u; if (u) { u.getIdToken().then(function (t) { currentIdToken = t; loadConversations(); }); } else { currentIdToken = null; historyEl.innerHTML = ''; } updateAuthButton(); });
+  })();
+
   document.querySelectorAll('.history-item').forEach(function (button) {
     button.addEventListener('click', function () {
       document.querySelectorAll('.history-item').forEach(function (item) { item.classList.remove('selected'); });
@@ -374,22 +505,62 @@
       toggleSidebar(false);
     });
   });
-
-  document.getElementById('new-chat').addEventListener('click', resetChat);
+  document.getElementById('new-chat').addEventListener('click', function () {
+    if (currentIdToken) createConversation(); else resetChat();
+  });
   document.getElementById('clear-history').addEventListener('click', function (event) {
     event.preventDefault();
-    showToast('Your local chat list is ready to clear');
+    if (!currentIdToken) {
+      // clear local static items
+      historyEl.innerHTML = '';
+      showToast('Local history cleared');
+      return;
+    }
+    if (!confirm('Delete all conversations from your account? This cannot be undone.')) return;
+    // fetch and delete
+    fetch('/api/conversations', { headers: currentIdToken ? { Authorization: 'Bearer ' + currentIdToken } : {} }).then(function (r) { return r.json(); }).then(async function (data) {
+      var list = data.conversations || [];
+      for (const c of list) {
+        await fetch('/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } });
+      }
+      historyEl.innerHTML = '';
+      showToast('All conversations deleted');
+    }).catch(function () { showToast('Failed to clear conversations'); });
   });
   document.getElementById('sidebar-open').addEventListener('click', function () { toggleSidebar(true); });
   document.getElementById('sidebar-close').addEventListener('click', function () { toggleSidebar(false); });
   sidebarScrim.addEventListener('click', function () { toggleSidebar(false); });
   document.getElementById('share-chat').addEventListener('click', function () {
-    showToast('Sharing will be available when a chat is connected');
+    // copy current conversation messages to clipboard
+    (async function () {
+      try {
+        var text = '';
+        if (currentConversationId && currentIdToken) {
+          const r = await fetch('/api/conversations/' + currentConversationId, { headers: { Authorization: 'Bearer ' + currentIdToken } });
+          if (r.ok) {
+            const data = await r.json();
+            text = (data.title ? data.title + '\n\n' : '') + (data.messages || []).map((m) => (m.role + ': ' + m.content)).join('\n\n');
+          }
+        }
+        if (!text) {
+          // fallback to DOM
+          document.querySelectorAll('.message').forEach(function (el) {
+            const role = el.classList.contains('assistant') ? 'assistant' : 'user';
+            const p = el.querySelector('.message-body p');
+            if (p) text += role + ': ' + p.textContent + '\n\n';
+          });
+        }
+        await navigator.clipboard.writeText(text || '');
+        showToast('Conversation copied to clipboard');
+      } catch (err) { showToast('Failed to copy conversation'); }
+    })();
   });
   document.getElementById('toggle-theme').addEventListener('click', function () {
     document.body.classList.toggle('light-mode');
     showToast(document.body.classList.contains('light-mode') ? 'Light mode on' : 'Dark mode on');
   });
+  if (regenerateBtn) regenerateBtn.addEventListener('click', function () { regenerateLast(); });
+  if (stopBtn) stopBtn.addEventListener('click', function () { if (activeRequest && activeRequest.abort) { activeRequest.abort(); showToast('Generation stopped'); } activeRequest = null; stopBtn.disabled = true; updateComposer(); });
   document.getElementById('attach-file').addEventListener('click', function () { showToast('File attachments are coming soon'); });
   document.getElementById('deep-think').addEventListener('click', function () {
     this.classList.toggle('active');
