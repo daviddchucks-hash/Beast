@@ -33,12 +33,12 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
 const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
-// Ordered list of free OpenRouter model IDs (all must be valid free-tier models)
-const OPENROUTER_FREE_MODELS = (process.env.OPENROUTER_FREE_MODELS || 'meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.0-flash-exp:free,deepseek/deepseek-r1:free,nvidia/nemotron-nano-8b-v2:free,microsoft/phi-3-mini-128k-instruct:free').split(',').map((s) => s.trim()).filter(Boolean);
-// List of free Gemini models the user can pick from
-const GEMINI_FREE_MODELS = (process.env.GEMINI_FREE_MODELS || 'gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash,gemini-1.5-flash-8b').split(',').map((s) => s.trim()).filter(Boolean);
+// Ordered list of free OpenRouter model IDs (verified July 2026 on openrouter.ai/models)
+const OPENROUTER_FREE_MODELS = (process.env.OPENROUTER_FREE_MODELS || 'meta-llama/llama-3.3-70b-instruct:free,deepseek/deepseek-r1:free,deepseek/deepseek-chat-v3-0324:free,google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-nano-30b-a3b:free,openai/gpt-oss-120b:free,openai/gpt-oss-20b:free,cohere/north-mini-code:free,qwen/qwen3-next-80b-a3b-instruct:free').split(',').map((s) => s.trim()).filter(Boolean);
+// Free Gemini models the user can pick from (gemini-2.0 and below are retired as of June 2026)
+const GEMINI_FREE_MODELS = (process.env.GEMINI_FREE_MODELS || 'gemini-2.5-flash,gemini-2.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash').split(',').map((s) => s.trim()).filter(Boolean);
 const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 // Which provider to use: "auto" (try OpenRouter then Gemini), "openrouter", or "gemini"
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'auto').toLowerCase();
@@ -49,7 +49,7 @@ const SHOW_PROVIDER_ERRORS = String(process.env.SHOW_PROVIDER_ERRORS || '').toLo
 const PUBLIC_CHAT = String(process.env.PUBLIC_CHAT || '').toLowerCase() === 'true';
 
 const SYSTEM_PROMPT = (process.env.SYSTEM_PROMPT || [
-  'You are Drexora AI, a helpful, clear, thoughtful general-purpose assistant.',
+  'You are Drexora AI, a helpful, clear, thoughtful general-purpose assistant. You are named Drexora AI (not Beast).',
   'Answer directly and accurately. If the request is ambiguous, ask one concise clarifying question.',
   'Use markdown-style plain text when it improves readability, but do not include unsafe or fabricated claims.',
   'Be honest about uncertainty and never claim to have performed actions you cannot perform.'

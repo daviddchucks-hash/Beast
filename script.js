@@ -1,6 +1,17 @@
 (function () {
   'use strict';
 
+  // ── Backend API base URL ──────────────────────────────────
+  // When hosted on Render, the frontend is served from the same origin.
+  // For local development or GitHub Pages, set API_BASE to the Render URL.
+  var API_BASE = '';
+  // Auto-detect: if we're NOT on the same origin as the API, use the Render URL.
+  // The server serves the frontend at the same origin, so same-origin = API_BASE = ''.
+  // If deployed on GitHub Pages, set this to the Render URL.
+  if (location.hostname.indexOf('github.io') !== -1) {
+    API_BASE = 'https://drexora-ai.onrender.com';
+  }
+
   // ── DOM refs ──────────────────────────────────────────────
   var input = document.getElementById('prompt-input');
   var composer = document.getElementById('composer');
@@ -22,34 +33,112 @@
   var stopBtn = document.getElementById('stop-generation');
   var historyEl = document.getElementById('history');
 
-  // ── API key storage ───────────────────────────────────────
-  var openrouterKey = localStorage.getItem('beast:openrouter_key') || '';
-  var geminiKey = localStorage.getItem('beast:gemini_key') || '';
-  var selectedProvider = localStorage.getItem('beast:provider') || 'openrouter';
-  var selectedModel = localStorage.getItem('beast:model') || null;
+  // ── Local settings (provider/model selection only; no API keys) ──
+  var selectedProvider = localStorage.getItem('drexora:provider') || 'openrouter';
+  var selectedModel = localStorage.getItem('drexora:model') || null;
+  var themeMode = localStorage.getItem('drexora:theme') || 'dark';
 
-  // ── Free models list (verified July 2026) ─────────────────
+  // ── Chat history in localStorage ──────────────────────────
+  var HISTORY_KEY = 'drexora:conversations';
+  var CURRENT_CHAT_KEY = 'drexora:current_chat';
+
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveHistory(h) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-50))); } catch (e) {}
+  }
+  function getCurrentChatId() {
+    return localStorage.getItem(CURRENT_CHAT_KEY) || null;
+  }
+  function setCurrentChatId(id) {
+    if (id) localStorage.setItem(CURRENT_CHAT_KEY, id);
+    else localStorage.removeItem(CURRENT_CHAT_KEY);
+  }
+  function createChat(title) {
+    var h = getHistory();
+    var id = 'chat_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    h.unshift({ id: id, title: title || 'New chat', messages: [], createdAt: Date.now(), updatedAt: Date.now() });
+    saveHistory(h);
+    return id;
+  }
+  function updateChat(id, messages) {
+    var h = getHistory();
+    for (var i = 0; i < h.length; i++) {
+      if (h[i].id === id) {
+        h[i].messages = messages;
+        h[i].updatedAt = Date.now();
+        if (h[i].title === 'New chat' && messages.length > 0) {
+          var firstUser = '';
+          for (var j = 0; j < messages.length; j++) {
+            if (messages[j].role === 'user') { firstUser = messages[j].content; break; }
+          }
+          h[i].title = firstUser.slice(0, 60);
+        }
+        break;
+      }
+    }
+    saveHistory(h);
+  }
+  function deleteChat(id) {
+    var h = getHistory().filter(function (c) { return c.id !== id; });
+    saveHistory(h);
+  }
+  function loadChat(id) {
+    var h = getHistory();
+    for (var i = 0; i < h.length; i++) {
+      if (h[i].id === id) return h[i];
+    }
+    return null;
+  }
+
+  // ── Free models (will be fetched from server, with fallback) ──
   var OPENROUTER_MODELS = [
     'meta-llama/llama-3.3-70b-instruct:free',
     'deepseek/deepseek-r1:free',
     'deepseek/deepseek-chat-v3-0324:free',
     'google/gemma-4-31b-it:free',
     'nvidia/nemotron-3-super-120b-a12b:free',
-    'nvidia/nemotron-3-nano-30b-a3b:free',
     'openai/gpt-oss-120b:free',
     'openai/gpt-oss-20b:free',
-    'cohere/north-mini-code:free',
     'qwen/qwen3-next-80b-a3b-instruct:free'
   ];
   var GEMINI_MODELS = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.5-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-3.1-flash-lite',
-    'gemini-flash-latest'
+    'gemini-3.6-flash'
   ];
 
   var modelsByProvider = { openrouter: OPENROUTER_MODELS, gemini: GEMINI_MODELS };
+  var serverProviders = { openrouter: false, gemini: false };
+
+  // Fetch available models + provider status from server
+  async function fetchServerConfig() {
+    try {
+      var resp = await fetch(API_BASE + '/api/health');
+      if (resp.ok) {
+        var data = await resp.json();
+        serverProviders.openrouter = data.providers && data.providers.openrouter;
+        serverProviders.gemini = data.providers && data.providers.gemini;
+      }
+    } catch (e) {}
+    try {
+      var resp2 = await fetch(API_BASE + '/api/ai/models');
+      if (resp2.ok) {
+        var data2 = await resp2.json();
+        if (data2.byProvider) {
+          if (data2.byProvider.openrouter && data2.byProvider.openrouter.length) OPENROUTER_MODELS = data2.byProvider.openrouter;
+          if (data2.byProvider.gemini && data2.byProvider.gemini.length) GEMINI_MODELS = data2.byProvider.gemini;
+          modelsByProvider = { openrouter: OPENROUTER_MODELS, gemini: GEMINI_MODELS };
+        }
+      }
+    } catch (e) {}
+    updateConnectionStatus();
+    updateProviderTabs();
+    renderModelMenu();
+  }
 
   // ── Settings modal ────────────────────────────────────────
   var settingsModal = document.getElementById('settings-modal');
@@ -57,14 +146,14 @@
   var settingsSave = document.getElementById('settings-save');
   var settingsClear = document.getElementById('settings-clear');
   var settingsStatus = document.getElementById('settings-status');
-  var openrouterKeyInput = document.getElementById('openrouter-key-input');
-  var geminiKeyInput = document.getElementById('gemini-key-input');
   var openSettingsBtn = document.getElementById('open-settings');
+  var defaultProviderSelect = document.getElementById('default-provider-select');
+  var themeSelect = document.getElementById('theme-select');
 
   function openSettings() {
     if (!settingsModal) return;
-    openrouterKeyInput.value = openrouterKey;
-    geminiKeyInput.value = geminiKey;
+    if (defaultProviderSelect) defaultProviderSelect.value = selectedProvider === 'gemini' ? 'gemini' : (selectedProvider === 'openrouter' ? 'openrouter' : 'auto');
+    if (themeSelect) themeSelect.value = themeMode;
     settingsStatus.textContent = '';
     settingsStatus.style.color = '';
     settingsModal.setAttribute('aria-hidden', 'false');
@@ -79,41 +168,67 @@
   if (openSettingsBtn) openSettingsBtn.addEventListener('click', function (ev) { ev.preventDefault(); openSettings(); });
   if (settingsClose) settingsClose.addEventListener('click', closeSettings);
   if (settingsSave) settingsSave.addEventListener('click', function () {
-    openrouterKey = openrouterKeyInput.value.trim();
-    geminiKey = geminiKeyInput.value.trim();
-    localStorage.setItem('beast:openrouter_key', openrouterKey);
-    localStorage.setItem('beast:gemini_key', geminiKey);
+    if (defaultProviderSelect) {
+      var prov = defaultProviderSelect.value;
+      if (prov === 'auto') prov = 'openrouter';
+      selectedProvider = prov;
+      localStorage.setItem('drexora:provider', prov);
+    }
+    if (themeSelect) {
+      themeMode = themeSelect.value;
+      localStorage.setItem('drexora:theme', themeMode);
+      applyTheme();
+    }
     settingsStatus.style.color = '#63c174';
-    settingsStatus.textContent = 'Keys saved!';
+    settingsStatus.textContent = 'Settings saved!';
     updateConnectionStatus();
     updateProviderTabs();
-    showToast('API keys saved');
+    renderModelMenu();
+    showToast('Settings saved');
     setTimeout(closeSettings, 1200);
   });
   if (settingsClear) settingsClear.addEventListener('click', function () {
-    openrouterKey = '';
-    geminiKey = '';
-    openrouterKeyInput.value = '';
-    geminiKeyInput.value = '';
-    localStorage.removeItem('beast:openrouter_key');
-    localStorage.removeItem('beast:gemini_key');
+    localStorage.removeItem('drexora:provider');
+    localStorage.removeItem('drexora:model');
+    localStorage.removeItem('drexora:theme');
+    localStorage.removeItem(HISTORY_KEY);
+    localStorage.removeItem(CURRENT_CHAT_KEY);
+    selectedProvider = 'openrouter';
+    selectedModel = null;
+    themeMode = 'dark';
+    applyTheme();
     settingsStatus.style.color = '#ffb4b4';
-    settingsStatus.textContent = 'Keys cleared';
+    settingsStatus.textContent = 'Local data cleared';
     updateConnectionStatus();
     updateProviderTabs();
-    showToast('API keys cleared');
+    renderModelMenu();
+    renderHistory();
+    showToast('Local data cleared');
   });
+
+  // ── Theme ─────────────────────────────────────────────────
+  function applyTheme() {
+    if (themeMode === 'light') document.body.classList.add('light-mode');
+    else document.body.classList.remove('light-mode');
+  }
 
   // ── Provider / model UI ───────────────────────────────────
   function updateConnectionStatus() {
-    if (selectedProvider === 'openrouter' && openrouterKey) {
+    var hasProvider = serverProviders.openrouter || serverProviders.gemini;
+    if (!hasProvider) {
+      setConnectionStatus('offline', 'Connecting...');
+      return;
+    }
+    if (selectedProvider === 'openrouter' && serverProviders.openrouter) {
       setConnectionStatus('connected', 'OpenRouter ready');
-    } else if (selectedProvider === 'gemini' && geminiKey) {
+    } else if (selectedProvider === 'gemini' && serverProviders.gemini) {
       setConnectionStatus('connected', 'Gemini ready');
-    } else if ((selectedProvider === 'openrouter' && geminiKey) || (selectedProvider === 'gemini' && openrouterKey)) {
-      setConnectionStatus('warning', 'No key for ' + selectedProvider);
+    } else if (selectedProvider === 'openrouter' && serverProviders.gemini) {
+      setConnectionStatus('warning', 'OpenRouter offline, using Gemini');
+    } else if (selectedProvider === 'gemini' && serverProviders.openrouter) {
+      setConnectionStatus('warning', 'Gemini offline, using OpenRouter');
     } else {
-      setConnectionStatus('offline', 'Add API key');
+      setConnectionStatus('offline', 'No provider');
     }
   }
 
@@ -121,8 +236,8 @@
     if (!providerSwitch) return;
     providerSwitch.querySelectorAll('.provider-tab').forEach(function (tab) {
       var p = tab.getAttribute('data-provider');
-      var hasKey = (p === 'openrouter' && openrouterKey) || (p === 'gemini' && geminiKey);
-      tab.style.opacity = hasKey ? '1' : '0.4';
+      var available = serverProviders[p];
+      tab.style.opacity = available ? '1' : '0.4';
       tab.classList.toggle('active', p === selectedProvider);
     });
   }
@@ -147,7 +262,7 @@
       btn.title = m;
       btn.addEventListener('click', function () {
         selectedModel = m;
-        localStorage.setItem('beast:model', m);
+        localStorage.setItem('drexora:model', m);
         modelBadge.textContent = sn;
         modelMenu.style.display = 'none';
       });
@@ -155,14 +270,14 @@
     });
     if (models.length && models.indexOf(selectedModel) === -1) {
       selectedModel = models[0];
-      localStorage.setItem('beast:model', selectedModel);
+      localStorage.setItem('drexora:model', selectedModel);
     }
     if (selectedModel) modelBadge.textContent = shortModelName(selectedModel);
   }
 
   function setActiveProvider(provider) {
     selectedProvider = provider;
-    localStorage.setItem('beast:provider', provider);
+    localStorage.setItem('drexora:provider', provider);
     updateProviderTabs();
     renderModelMenu();
     updateConnectionStatus();
@@ -234,7 +349,7 @@
     var avatar = role === 'assistant'
       ? '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span>'
       : '<span class="message-avatar">You</span>';
-    var label = role === 'assistant' ? 'Beast AI' : 'You';
+    var label = role === 'assistant' ? 'Drexora AI' : 'You';
     message.innerHTML = avatar + '<div class="message-body"><span class="message-label">' + label + '</span><p></p></div>';
     message.querySelector('p').textContent = text;
     list.appendChild(message);
@@ -246,131 +361,74 @@
     if (!list) { list = document.createElement('div'); list.className = 'message-list'; conversation.appendChild(list); }
     var message = document.createElement('article');
     message.className = 'message assistant typing-message';
-    message.innerHTML = '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span><div class="message-body"><span class="message-label">Beast AI</span><span class="typing-dots"><i></i><i></i><i></i></span></div>';
+    message.innerHTML = '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span><div class="message-body"><span class="message-label">Drexora AI</span><span class="typing-dots"><i></i><i></i><i></i></span></div>';
     list.appendChild(message);
     message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return message;
   }
 
-  // ── Direct OpenRouter call (OpenAI-compatible) ─────────────
-  async function callOpenRouter(messages, model) {
-    if (!openrouterKey) throw new Error('No OpenRouter API key. Click "API Keys & Settings" to add one.');
+  // ── Call backend API (keys stay on server) ───────────────
+  async function callBackend(messages, model, provider) {
     var controller = new AbortController();
     activeRequest = controller;
     if (stopBtn) stopBtn.disabled = false;
     updateComposer();
-
-    var systemMsg = { role: 'system', content: 'You are Beast AI, a helpful, concise, friendly assistant.' };
-    var apiMessages = [systemMsg].concat(messages);
-
-    var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + openrouterKey,
-        'HTTP-Referer': location.origin,
-        'X-Title': 'Beast AI'
-      },
-      body: JSON.stringify({ model: model, messages: apiMessages, temperature: 0.7 }),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      var errText = await response.text().catch(function () { return ''; });
-      var err = new Error('OpenRouter error ' + response.status + ': ' + errText.slice(0, 200));
-      throw err;
-    }
-
-    var data = await response.json();
-    activeRequest = null;
-    if (stopBtn) stopBtn.disabled = true;
-    updateComposer();
-
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      return data.choices[0].message.content || '';
-    }
-    throw new Error('OpenRouter returned no response');
-  }
-
-  // ── Direct Gemini call (generateContent) ──────────────────
-  async function callGemini(messages, model) {
-    if (!geminiKey) throw new Error('No Gemini API key. Click "API Keys & Settings" to add one.');
-    var controller = new AbortController();
-    activeRequest = controller;
-    if (stopBtn) stopBtn.disabled = false;
-    updateComposer();
-
-    var systemParts = [];
-    var contents = [];
-    for (var i = 0; i < messages.length; i++) {
-      var m = messages[i];
-      if (m.role === 'system') { systemParts.push(m.content); continue; }
-      contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] });
-    }
-    var systemInstruction = systemParts.length ? { parts: [{ text: systemParts.join('\n') }] } : undefined;
-
-    var body = { contents: contents, generationConfig: { temperature: 0.7 } };
-    if (systemInstruction) body.systemInstruction = systemInstruction;
-
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + geminiKey;
-
-    var response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      var errText = await response.text().catch(function () { return ''; });
-      throw new Error('Gemini error ' + response.status + ': ' + errText.slice(0, 200));
-    }
-
-    var data = await response.json();
-    activeRequest = null;
-    if (stopBtn) stopBtn.disabled = true;
-    updateComposer();
-
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      var parts = data.candidates[0].content.parts || [];
-      var text = parts.map(function (p) { return p.text || ''; }).join('');
-      if (text) return text;
-    }
-    throw new Error('Gemini returned no response');
-  }
-
-  // ── Ask assistant (routes to selected provider) ───────────
-  async function askAssistant() {
-    var lastUserMsg = chatMessages[chatMessages.length - 1];
-    if (!lastUserMsg) throw new Error('No message to send');
 
     try {
-      if (selectedProvider === 'openrouter') {
-        setConnectionStatus('connected', 'Asking OpenRouter...');
-        var reply = await callOpenRouter(chatMessages, selectedModel || OPENROUTER_MODELS[0]);
-        setConnectionStatus('connected', 'OpenRouter ready');
-        return reply;
-      } else {
-        setConnectionStatus('connected', 'Asking Gemini...');
-        var reply2 = await callGemini(chatMessages, selectedModel || GEMINI_MODELS[0]);
-        setConnectionStatus('connected', 'Gemini ready');
-        return reply2;
+      var response = await fetch(API_BASE + '/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages, model: model, provider: provider }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        var errText = await response.text().catch(function () { return ''; });
+        throw new Error('Server error ' + response.status + ': ' + errText.slice(0, 200));
       }
+
+      var data = await response.json();
+      activeRequest = null;
+      if (stopBtn) stopBtn.disabled = true;
+      updateComposer();
+
+      if (data.reply) return data.reply;
+      if (data.error) throw new Error(data.error);
+      throw new Error('No response from server');
     } catch (err) {
       activeRequest = null;
       if (stopBtn) stopBtn.disabled = true;
       updateComposer();
+      throw err;
+    }
+  }
+
+  // ── Ask assistant (routes via backend) ───────────────────
+  async function askAssistant() {
+    var lastUserMsg = chatMessages[chatMessages.length - 1];
+    if (!lastUserMsg) throw new Error('No message to send');
+
+    var provider = selectedProvider;
+    var model = selectedModel || (modelsByProvider[selectedProvider] || [])[0] || null;
+
+    try {
+      setConnectionStatus('connected', 'Asking ' + (provider === 'gemini' ? 'Gemini' : 'OpenRouter') + '...');
+      var reply = await callBackend(chatMessages, model, provider);
       updateConnectionStatus();
-      // Auto-fallback to the other provider if it has a key
-      if (selectedProvider === 'openrouter' && geminiKey) {
-        showToast('OpenRouter failed, trying Gemini...');
-        setConnectionStatus('warning', 'Fallback to Gemini');
-        try { return await callGemini(chatMessages, GEMINI_MODELS[0]); } catch (e) { throw err; }
-      }
-      if (selectedProvider === 'gemini' && openrouterKey) {
-        showToast('Gemini failed, trying OpenRouter...');
-        setConnectionStatus('warning', 'Fallback to OpenRouter');
-        try { return await callOpenRouter(chatMessages, OPENROUTER_MODELS[0]); } catch (e) { throw err; }
+      return reply;
+    } catch (err) {
+      updateConnectionStatus();
+      // Auto-fallback to the other provider
+      var otherProvider = provider === 'openrouter' ? 'gemini' : 'openrouter';
+      if (serverProviders[otherProvider]) {
+        showToast((provider === 'gemini' ? 'Gemini' : 'OpenRouter') + ' failed, trying ' + (otherProvider === 'gemini' ? 'Gemini' : 'OpenRouter') + '...');
+        setConnectionStatus('warning', 'Fallback to ' + otherProvider);
+        try {
+          var otherModel = (modelsByProvider[otherProvider] || [])[0] || null;
+          var reply2 = await callBackend(chatMessages, otherModel, otherProvider);
+          updateConnectionStatus();
+          return reply2;
+        } catch (e) { throw err; }
       }
       throw err;
     }
@@ -381,9 +439,9 @@
     var prompt = text.trim().slice(0, 4000);
     if (!prompt || activeRequest) return;
 
-    if (!openrouterKey && !geminiKey) {
-      showToast('Please add an API key first');
-      openSettings();
+    // Check if any provider is available
+    if (!serverProviders.openrouter && !serverProviders.gemini) {
+      showToast('Server is still connecting. Please wait a moment and try again.');
       return;
     }
 
@@ -391,6 +449,16 @@
     updateComposer();
     addMessage('user', prompt);
     chatMessages.push({ role: 'user', content: prompt });
+
+    // Ensure we have a current chat
+    var chatId = getCurrentChatId();
+    if (!chatId) {
+      chatId = createChat(prompt.slice(0, 60));
+      setCurrentChatId(chatId);
+    }
+    updateChat(chatId, chatMessages);
+    renderHistory();
+
     var typing = showTyping();
 
     try {
@@ -398,6 +466,8 @@
       typing.remove();
       addMessage('assistant', reply);
       chatMessages.push({ role: 'assistant', content: reply });
+      updateChat(chatId, chatMessages);
+      renderHistory();
     } catch (err) {
       typing.remove();
       var errMsg = err.message || String(err);
@@ -406,21 +476,121 @@
     }
   }
 
+  // ── History sidebar ───────────────────────────────────────
+  function renderHistory() {
+    var h = getHistory();
+    historyEl.innerHTML = '';
+    if (!h.length) {
+      var label = document.createElement('p');
+      label.className = 'history-label';
+      label.textContent = 'Recent';
+      historyEl.appendChild(label);
+      var empty = document.createElement('p');
+      empty.style.cssText = 'padding: 10px; color: #777; font-size: 0.82rem;';
+      empty.textContent = 'No conversations yet';
+      historyEl.appendChild(empty);
+      return;
+    }
+    var labelEl = document.createElement('p');
+    labelEl.className = 'history-label';
+    labelEl.textContent = 'Recent';
+    historyEl.appendChild(labelEl);
+
+    var currentId = getCurrentChatId();
+    h.forEach(function (chat) {
+      var btn = document.createElement('button');
+      btn.className = 'history-item' + (chat.id === currentId ? ' selected' : '');
+      btn.type = 'button';
+      btn.setAttribute('data-chat-id', chat.id);
+      var icon = document.createElement('span');
+      icon.className = 'history-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = '◌';
+      var title = document.createElement('span');
+      title.textContent = chat.title || 'New chat';
+      title.style.overflow = 'hidden';
+      title.style.textOverflow = 'ellipsis';
+      title.style.whiteSpace = 'nowrap';
+      btn.appendChild(icon);
+      btn.appendChild(title);
+
+      // Delete button
+      var delBtn = document.createElement('span');
+      delBtn.className = 'history-action';
+      delBtn.setAttribute('aria-hidden', 'true');
+      delBtn.textContent = '×';
+      delBtn.style.cssText = 'margin-left:auto; padding: 2px 8px; border-radius: 6px; color: #9a9a9a; cursor: pointer; font-size: 1.1rem;';
+      delBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        deleteChat(chat.id);
+        if (chat.id === getCurrentChatId()) {
+          setCurrentChatId(null);
+          resetChat();
+        }
+        renderHistory();
+        showToast('Conversation deleted');
+      });
+      btn.appendChild(delBtn);
+
+      btn.addEventListener('click', function () {
+        loadChatIntoView(chat.id);
+        toggleSidebar(false);
+      });
+      historyEl.appendChild(btn);
+    });
+  }
+
+  function loadChatIntoView(id) {
+    var chat = loadChat(id);
+    if (!chat) return;
+    setCurrentChatId(id);
+    chatMessages = chat.messages.slice();
+    conversation.innerHTML = '';
+    if (!chatMessages.length) {
+      showWelcome();
+    } else {
+      var list = document.createElement('div');
+      list.className = 'message-list';
+      conversation.appendChild(list);
+      chatMessages.forEach(function (m) {
+        var message = document.createElement('article');
+        message.className = 'message ' + m.role;
+        var avatar = m.role === 'assistant'
+          ? '<span class="message-avatar"><img src="assets/drexora-mark.png" alt=""></span>'
+          : '<span class="message-avatar">You</span>';
+        var label = m.role === 'assistant' ? 'Drexora AI' : 'You';
+        message.innerHTML = avatar + '<div class="message-body"><span class="message-label">' + label + '</span><p></p></div>';
+        message.querySelector('p').textContent = m.content;
+        list.appendChild(message);
+      });
+      welcomeState = null;
+    }
+    renderHistory();
+    updateComposer();
+  }
+
   // ── Reset / new chat ──────────────────────────────────────
+  function showWelcome() {
+    conversation.innerHTML = '';
+    var freshWelcome = document.createElement('div');
+    freshWelcome.className = 'welcome-state';
+    freshWelcome.id = 'welcome-state';
+    freshWelcome.innerHTML = '<div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div><h1>How can I help you today?</h1><p>Ask Drexora AI to think, write, plan, or explore with you.</p><div class="prompt-grid"><button class="prompt-card" type="button" data-prompt="Help me plan a focused and productive day"><span class="prompt-icon purple" aria-hidden="true">◷</span><span><strong>Plan my day</strong><small>Create a focused routine</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Give me five creative ideas for a side project"><span class="prompt-icon lime" aria-hidden="true">✦</span><span><strong>Explore ideas</strong><small>Find a fresh direction</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Explain a complex topic in a simple way"><span class="prompt-icon blue" aria-hidden="true">◇</span><span><strong>Learn something</strong><small>Make it easy to understand</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Help me write a clear and thoughtful message"><span class="prompt-icon orange" aria-hidden="true">✎</span><span><strong>Write with me</strong><small>Turn thoughts into words</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button></div>';
+    conversation.appendChild(freshWelcome);
+    welcomeState = freshWelcome;
+    bindPromptCards();
+  }
+
   function resetChat() {
     if (activeRequest) { try { activeRequest.abort(); } catch (e) {} }
     activeRequest = null;
     chatMessages = [];
-    conversation.innerHTML = '';
-    var freshWelcome = document.createElement('div');
-    freshWelcome.className = 'welcome-state';
-    freshWelcome.innerHTML = '<div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div><h1>How can I help you today?</h1><p>Ask Beast AI to think, write, plan, or explore with you.</p><div class="prompt-grid"><button class="prompt-card" type="button" data-prompt="Help me plan a focused and productive day"><span class="prompt-icon purple" aria-hidden="true">◷</span><span><strong>Plan my day</strong><small>Create a focused routine</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Give me five creative ideas for a side project"><span class="prompt-icon lime" aria-hidden="true">✦</span><span><strong>Explore ideas</strong><small>Find a fresh direction</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Explain a complex topic in a simple way"><span class="prompt-icon blue" aria-hidden="true">◇</span><span><strong>Learn something</strong><small>Make it easy to understand</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button><button class="prompt-card" type="button" data-prompt="Help me write a clear and thoughtful message"><span class="prompt-icon orange" aria-hidden="true">✎</span><span><strong>Write with me</strong><small>Turn thoughts into words</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button></div>';
-    conversation.appendChild(freshWelcome);
-    welcomeState = freshWelcome;
-    bindPromptCards();
+    setCurrentChatId(null);
+    showWelcome();
     updateComposer();
     showToast('Started a new chat');
     toggleSidebar(false);
+    renderHistory();
   }
 
   function bindPromptCards() {
@@ -450,6 +620,8 @@
           typing.remove();
           addMessage('assistant', reply);
           chatMessages.push({ role: 'assistant', content: reply });
+          var chatId = getCurrentChatId();
+          if (chatId) updateChat(chatId, chatMessages);
         }).catch(function (err) {
           typing.remove();
           addMessage('assistant', 'I could not get a response. ' + (err.message || String(err)));
@@ -463,18 +635,12 @@
   // ── Event bindings ────────────────────────────────────────
   bindPromptCards();
 
-  document.querySelectorAll('.history-item').forEach(function (button) {
-    button.addEventListener('click', function () {
-      document.querySelectorAll('.history-item').forEach(function (item) { item.classList.remove('selected'); });
-      button.classList.add('selected');
-      toggleSidebar(false);
-    });
-  });
-
   document.getElementById('new-chat').addEventListener('click', function () { resetChat(); });
   document.getElementById('clear-history').addEventListener('click', function (event) {
     event.preventDefault();
-    historyEl.innerHTML = '';
+    localStorage.removeItem(HISTORY_KEY);
+    setCurrentChatId(null);
+    resetChat();
     showToast('History cleared');
   });
   document.getElementById('sidebar-open').addEventListener('click', function () { toggleSidebar(true); });
@@ -486,7 +652,7 @@
       try {
         var text = '';
         document.querySelectorAll('.message').forEach(function (el) {
-          var role = el.classList.contains('assistant') ? 'Beast AI' : 'You';
+          var role = el.classList.contains('assistant') ? 'Drexora AI' : 'You';
           var p = el.querySelector('.message-body p');
           if (p) text += role + ': ' + p.textContent + '\n\n';
         });
@@ -497,8 +663,10 @@
   });
 
   document.getElementById('toggle-theme').addEventListener('click', function () {
-    document.body.classList.toggle('light-mode');
-    showToast(document.body.classList.contains('light-mode') ? 'Light mode on' : 'Dark mode on');
+    themeMode = document.body.classList.contains('light-mode') ? 'dark' : 'light';
+    localStorage.setItem('drexora:theme', themeMode);
+    applyTheme();
+    showToast(themeMode === 'light' ? 'Light mode on' : 'Dark mode on');
   });
 
   if (regenerateBtn) regenerateBtn.addEventListener('click', function () { regenerateLast(); });
@@ -527,15 +695,11 @@
   });
 
   // ── Init ──────────────────────────────────────────────────
+  applyTheme();
+  renderHistory();
   updateProviderTabs();
   renderModelMenu();
   updateConnectionStatus();
   updateComposer();
-
-  if (!openrouterKey && !geminiKey) {
-    setTimeout(function () {
-      showToast('Add your free API key to start chatting');
-      openSettings();
-    }, 800);
-  }
+  fetchServerConfig();
 })();
