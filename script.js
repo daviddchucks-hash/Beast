@@ -66,6 +66,12 @@
       });
       if (!selectedModel && data.defaultModel) selectedModel = data.defaultModel;
       if (selectedModel) modelBadge.textContent = selectedModel;
+      // If the saved model is no longer in the server's list, switch to the server default
+      if (selectedModel && models.length && models.indexOf(selectedModel) === -1 && data.defaultModel) {
+        selectedModel = data.defaultModel;
+        localStorage.setItem('drexora:model', selectedModel);
+        modelBadge.textContent = selectedModel;
+      }
     } catch (e) { }
   }
 

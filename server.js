@@ -33,6 +33,7 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
 const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
 const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 // Which provider to use: "auto" (try OpenRouter then Gemini), "openrouter", or "gemini"
@@ -124,7 +125,7 @@ app.get('/api/health', (req, res) => res.json({
 
 app.get('/api/ai/models', (req, res) => {
   const envList = (process.env.AVAILABLE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const geminiModels = GEMINI_API_KEY ? ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'] : [];
+  const geminiModels = GEMINI_API_KEY ? [GEMINI_MODEL] : [];
   const openrouterModels = OPENROUTER_API_KEY ? [DEFAULT_AI_MODEL] : [];
   const models = envList.length ? envList : [...geminiModels, ...openrouterModels];
   res.json({ models, defaultModel: models[0] || DEFAULT_AI_MODEL, providers: { openrouter: Boolean(OPENROUTER_API_KEY), gemini: Boolean(GEMINI_API_KEY) } });
@@ -163,7 +164,8 @@ function toGeminiContents(messages) {
 
 async function callGemini(messages, model) {
   if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
-  const geminiModel = model || 'gemini-1.5-flash';
+  // Only use the requested model if it starts with "gemini"; otherwise fall back to the configured default.
+  const geminiModel = (model && String(model).startsWith('gemini')) ? model : GEMINI_MODEL;
   // Pull system prompt out and send via systemInstruction
   const systemMessages = messages.filter((m) => m.role === 'system');
   const systemInstruction = systemMessages.map((m) => m.content).join('\n') || undefined;
