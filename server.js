@@ -26,7 +26,9 @@ loadLocalEnv();
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
-const FRONTEND_URL = process.env.FRONTEND_URL || '*';
+const FRONTEND_URL = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((s) => s.trim()).filter(Boolean)
+  : '*';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
@@ -66,7 +68,17 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && proc
 const app = express();
 app.use(helmet());
 app.use(express.json({ limit: '1mb' }));
-app.use(cors({ origin: FRONTEND_URL }));
+const allowedOrigins = Array.isArray(FRONTEND_URL) ? FRONTEND_URL : [FRONTEND_URL];
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS: ' + origin));
+    }
+  }
+};
+app.use(cors(corsOptions));
 
 // Rate limiting - keyed by user UID when available, otherwise by IP
 const limiter = rateLimit({

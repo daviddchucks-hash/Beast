@@ -18,7 +18,7 @@ services:
       - key: FIREBASE_DATABASE_URL
         value: https://beastai-f0702-default-rtdb.firebaseio.com
       - key: FRONTEND_URL
-        value: https://drexora-ai.onrender.com
+        value: https://drexora-ai.onrender.com,https://daviddchucks-hash.github.io
       - key: DEFAULT_AI_MODEL
         value: gpt-4o-mini
       - key: AI_RATE_LIMIT_PER_MINUTE
