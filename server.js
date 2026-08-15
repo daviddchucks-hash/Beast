@@ -31,6 +31,8 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
 const AI_RATE_LIMIT_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 60;
+// When true, include provider error details in responses for debugging.
+const SHOW_PROVIDER_ERRORS = String(process.env.SHOW_PROVIDER_ERRORS || '').toLowerCase() === 'true';
 // Allow an opt-in public chat mode (no Firebase auth required) when true.
 const PUBLIC_CHAT = String(process.env.PUBLIC_CHAT || '').toLowerCase() === 'true';
 
@@ -166,8 +168,9 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
       }
       provider = 'openrouter';
     } catch (err) {
-      console.error('OpenRouter error:', err.message);
+      console.error('OpenRouter error:', err && err.message ? err.message : String(err));
       reply = 'I’m having trouble connecting to the AI provider right now.';
+      var providerError = SHOW_PROVIDER_ERRORS ? (err && (err.message || JSON.stringify(err)) ? (err.message || String(err)) : String(err)) : null;
     }
 
     // Persist conversation & usage if Firebase available
@@ -223,7 +226,7 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
       }
     }
 
-    return res.json({ reply, provider });
+    return res.json({ reply, provider, providerError: providerError || null });
   } catch (err) {
     console.error('Chat handler error:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
@@ -476,8 +479,9 @@ app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) =
         fullReply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
       }
     } catch (err) {
-      console.error('OpenRouter error:', err.message);
+      console.error('OpenRouter error:', err && err.message ? err.message : String(err));
       fullReply = 'I’m having trouble connecting to the AI provider right now.';
+      var providerError = SHOW_PROVIDER_ERRORS ? (err && (err.message || JSON.stringify(err)) ? (err.message || String(err)) : String(err)) : null;
     }
 
     // Persist messages as usual (fire-and-forget)
@@ -532,6 +536,10 @@ app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) =
     // Send an initial ping
     res.write('event: meta\n');
     res.write('data: {"status":"ok"}\n\n');
+    if (providerError) {
+      res.write('event: error\n');
+      res.write('data: ' + JSON.stringify({ message: providerError }) + '\n\n');
+    }
 
     // Simulate streaming by splitting reply into chunks
     const chunkSize = 80;
