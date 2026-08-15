@@ -15,8 +15,56 @@
   var activeRequest = null;
   var chatMessages = [];
   var authButton = document.getElementById('auth-button');
+  var authModal = document.getElementById('auth-modal');
+  var authClose = document.getElementById('auth-close');
+  var authForm = document.getElementById('auth-form');
+  var authTitle = document.getElementById('auth-title');
+  var authEmail = document.getElementById('auth-email');
+  var authPassword = document.getElementById('auth-password');
+  var authSubmit = document.getElementById('auth-submit');
+  var authSwitch = document.getElementById('auth-switch');
+  var authReset = document.getElementById('auth-reset');
+  var authError = document.getElementById('auth-error');
   var currentUser = null;
   var currentIdToken = null;
+  var isRegister = false;
+  var modelPicker = document.getElementById('model-picker');
+  var modelMenu = document.getElementById('model-menu');
+  var modelBadge = document.getElementById('model-badge');
+  var selectedModel = localStorage.getItem('drexora:model') || null;
+
+  async function loadModels() {
+    try {
+      const r = await fetch('/api/ai/models');
+      if (!r.ok) return;
+      const data = await r.json();
+      const models = data.models || [];
+      modelMenu.innerHTML = '';
+      models.forEach(function (m) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'model-item';
+        btn.textContent = m;
+        btn.addEventListener('click', function () {
+          selectedModel = m;
+          localStorage.setItem('drexora:model', m);
+          modelBadge.textContent = m;
+          modelMenu.style.display = 'none';
+        });
+        modelMenu.appendChild(btn);
+      });
+      if (!selectedModel && data.defaultModel) selectedModel = data.defaultModel;
+      if (selectedModel) modelBadge.textContent = selectedModel;
+    } catch (e) { }
+  }
+
+  if (modelPicker) {
+    modelPicker.addEventListener('click', function () {
+      if (!modelMenu) return;
+      if (modelMenu.style.display === 'block') modelMenu.style.display = 'none';
+      else { modelMenu.style.display = 'block'; loadModels(); }
+    });
+  }
 
   function showToast(message) {
     toast.textContent = message;
@@ -109,37 +157,85 @@
   }
 
   async function askAssistant() {
-    var controller = new AbortController();
-    var timeout = window.setTimeout(function () { controller.abort(); }, 30000);
-    activeRequest = controller;
-    updateComposer();
-
+    // Fallback to non-streaming behavior if stream endpoint fails
     try {
-      var headers = { 'Content-Type': 'application/json' };
-      if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
-      var response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          messages: chatMessages,
-          deepThinking: document.getElementById('deep-think').classList.contains('active')
-        }),
-        signal: controller.signal
-      });
-      if (!response.ok) throw new Error('AI endpoint unavailable');
-      var data = await response.json();
-      if (!data.reply) throw new Error('Empty AI response');
-      setConnectionStatus(data.provider === 'openai' ? 'connected' : 'fallback', data.provider === 'openai' ? 'Connected' : 'Local fallback');
-      return data.reply;
-    } catch (error) {
-      setConnectionStatus('fallback', 'Local fallback');
-      showToast('AI connection unavailable — using local fallback');
-      return askLocal(chatMessages[chatMessages.length - 1].content);
-    } finally {
-      window.clearTimeout(timeout);
-      activeRequest = null;
+      return await askAssistantStream();
+    } catch (err) {
+      console.warn('Streaming failed, falling back to full response', err);
+      var controller = new AbortController();
+      var timeout = window.setTimeout(function () { controller.abort(); }, 30000);
+      activeRequest = controller;
       updateComposer();
+      try {
+        var headers = { 'Content-Type': 'application/json' };
+        if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
+        var response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active') }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error('AI endpoint unavailable');
+        var data = await response.json();
+        if (!data.reply) throw new Error('Empty AI response');
+        return data.reply;
+      } catch (error) {
+        setConnectionStatus('fallback', 'Local fallback');
+        showToast('AI connection unavailable — using local fallback');
+        return askLocal(chatMessages[chatMessages.length - 1].content);
+      } finally {
+        window.clearTimeout(timeout);
+        activeRequest = null;
+        updateComposer();
+      }
     }
+  }
+
+  async function askAssistantStream() {
+    var headers = { 'Content-Type': 'application/json' };
+    if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
+    var response = await fetch('/api/ai/chat/stream', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active') })
+    });
+    if (!response.ok) throw new Error('Stream endpoint unavailable');
+    setConnectionStatus('connected', 'Connected');
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let finalReply = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // parse SSE-style events (data: ...\n\n)
+      let parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        const lines = part.split('\n');
+        for (const line of lines) {
+          if (!line) continue;
+          if (line.indexOf('data:') === 0) {
+            const payload = line.slice(5).trim();
+            try {
+              const obj = JSON.parse(payload);
+              if (obj.delta) {
+                finalReply += obj.delta;
+                // update the typing message in the UI
+                const list = conversation.querySelector('.message-list');
+                const lastTyping = list && list.querySelector('.typing-message');
+                if (lastTyping) {
+                  const p = lastTyping.querySelector('.message-body p');
+                  if (p) p.textContent = finalReply;
+                }
+              }
+            } catch (e) { }
+          }
+        }
+      }
+    }
+    return finalReply;
   }
 
   async function sendMessage(text) {
@@ -211,6 +307,50 @@
     else authButton.textContent = 'Sign in';
   }
 
+  function openAuthModal() {
+    if (!authModal) return alert('Auth not available');
+    authModal.setAttribute('aria-hidden', 'false');
+    authModal.style.display = 'block';
+  }
+
+  function closeAuthModal() {
+    if (!authModal) return;
+    authModal.setAttribute('aria-hidden', 'true');
+    authModal.style.display = 'none';
+    authError.textContent = '';
+  }
+
+  if (authClose) authClose.addEventListener('click', closeAuthModal);
+
+  if (authSwitch) authSwitch.addEventListener('click', function () {
+    isRegister = !isRegister;
+    authTitle.textContent = isRegister ? 'Create account' : 'Sign in';
+    authSubmit.textContent = isRegister ? 'Create account' : 'Sign in';
+    authSwitch.textContent = isRegister ? 'Have an account? Sign in' : 'Create account';
+  });
+
+  if (authReset) authReset.addEventListener('click', function () {
+    var email = authEmail.value && authEmail.value.trim();
+    if (!email) return authError.textContent = 'Enter your email first';
+    firebase.auth().sendPasswordResetEmail(email).then(function () { authError.textContent = 'Reset email sent'; }).catch(function (e) { authError.textContent = e.message; });
+  });
+
+  if (authForm) {
+    authForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      authError.textContent = '';
+      var email = authEmail.value && authEmail.value.trim();
+      var pass = authPassword.value || '';
+      if (!email || !pass) return authError.textContent = 'Email and password required';
+      var auth = firebase.auth();
+      if (isRegister) {
+        auth.createUserWithEmailAndPassword(email, pass).then(function () { showToast('Account created'); closeAuthModal(); }).catch(function (e) { authError.textContent = e.message; });
+      } else {
+        auth.signInWithEmailAndPassword(email, pass).then(function () { showToast('Signed in'); closeAuthModal(); }).catch(function (e) { authError.textContent = e.message; });
+      }
+    });
+  }
+
   if (authButton) {
     authButton.addEventListener('click', function () {
       if (!window.firebase) return alert('Firebase not configured. See README to configure Firebase.');
@@ -219,18 +359,7 @@
         auth.signOut();
         showToast('Signed out');
       } else {
-        var email = prompt('Email');
-        if (!email) return;
-        var password = prompt('Password');
-        if (!password) return;
-        auth.signInWithEmailAndPassword(email, password).catch(function (err) {
-          // if sign-in fails, offer account creation
-          if (confirm('Sign-in failed. Create a new account?')) {
-            auth.createUserWithEmailAndPassword(email, password).then(function () { showToast('Account created'); }).catch(function (e) { alert(e.message); });
-          } else {
-            alert(err.message);
-          }
-        });
+        openAuthModal();
       }
     });
   }

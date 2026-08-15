@@ -128,13 +128,30 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
     const userMessages = sanitizeMessages(messages);
     if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
 
-    const prepared = [{ role: 'system', content: SYSTEM_PROMPT }, ...userMessages];
+    // Fetch relevant memories for the user and include them as system context
+    let prepared = [{ role: 'system', content: SYSTEM_PROMPT }];
+    if (admin.apps.length && req.user && req.user.uid) {
+      try {
+        const uid = req.user.uid;
+        const memSnap = await admin.database().ref(`users/${uid}/memories`).orderByChild('createdAt').limitToLast(5).once('value');
+        const mems = memSnap.val() || {};
+        const memList = Object.keys(mems).map((k) => mems[k]).map((m) => m.content).filter(Boolean);
+        if (memList.length) {
+          prepared.push({ role: 'system', content: 'Relevant memories:\n' + memList.join('\n') });
+        }
+      } catch (err) {
+        console.error('Failed to load memories:', err.message);
+      }
+    }
+    prepared = prepared.concat(userMessages);
 
     // Call OpenRouter
     let provider = 'local-fallback';
     let reply = '';
+    let providerData = null;
     try {
       const data = await callOpenRouter(prepared, model);
+      providerData = data;
       // attempt to extract text
       if (data && data.choices && data.choices[0]) {
         reply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
@@ -169,11 +186,32 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
         await msgsRef.push({ role: 'user', content: userMessages[userMessages.length - 1].content, createdAt: Date.now() });
         await msgsRef.push({ role: 'assistant', content: reply, createdAt: Date.now() });
 
-        // record usage stub (detailed token counting requires provider support)
+        // record usage (use provider metadata when available)
         const usageRef = db.ref(`users/${uid}/usage`).push();
-        await usageRef.set({ conversationId: convRef.key || conversationId, model: model || DEFAULT_AI_MODEL, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCost: null, createdAt: Date.now() });
+        const usageRecord = { conversationId: convRef.key || conversationId, model: model || DEFAULT_AI_MODEL, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCost: null, createdAt: Date.now() };
+        if (providerData && providerData.usage) {
+          usageRecord.inputTokens = providerData.usage.input_tokens || providerData.usage.prompt_tokens || null;
+          usageRecord.outputTokens = providerData.usage.output_tokens || providerData.usage.completion_tokens || null;
+          usageRecord.totalTokens = providerData.usage.total_tokens || null;
+          if (providerData.usage.estimated_cost) usageRecord.estimatedCost = providerData.usage.estimated_cost;
+        }
+        await usageRef.set(usageRecord);
       } catch (err) {
         console.error('Failed to persist conversation:', err.message);
+      }
+
+      // Simple memory extraction heuristics: save short, explicit statements about the user
+      try {
+        const lastUser = userMessages[userMessages.length - 1] && userMessages[userMessages.length - 1].content;
+        if (lastUser) {
+          const match = lastUser.match(/\b(I am|I'm|I\s+work|I\s+like|I\s+love|I\s+build)\b(.{0,200})/i);
+          if (match) {
+            const memRef = admin.database().ref(`users/${uid}/memories`).push();
+            await memRef.set({ content: match[0].slice(0, 500), category: 'auto', importance: 1, createdAt: Date.now(), updatedAt: Date.now() });
+          }
+        }
+      } catch (err) {
+        console.error('Memory extraction failed:', err.message);
       }
     }
 
@@ -342,4 +380,166 @@ app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Drexora AI (Express) listening on port ${PORT}`);
   console.log(OPENROUTER_API_KEY ? `OpenRouter enabled (${DEFAULT_AI_MODEL})` : 'No OpenRouter key configured; AI calls will fail');
+});
+
+// Backwards-compatible route used by older frontends
+app.post('/api/chat', verifyFirebaseToken, limiter, async (req, res) => {
+  // reuse the same handler logic by calling the /api/ai/chat handler
+  try {
+    // delegate by calling the same logic inline
+    const { messages, model, conversationId } = req.body || {};
+    const userMessages = sanitizeMessages(messages);
+    if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
+    // Fetch relevant memories and include them
+    let prepared = [{ role: 'system', content: SYSTEM_PROMPT }];
+    if (admin.apps.length && req.user && req.user.uid) {
+      try {
+        const uid = req.user.uid;
+        const memSnap = await admin.database().ref(`users/${uid}/memories`).orderByChild('createdAt').limitToLast(5).once('value');
+        const mems = memSnap.val() || {};
+        const memList = Object.keys(mems).map((k) => mems[k]).map((m) => m.content).filter(Boolean);
+        if (memList.length) prepared.push({ role: 'system', content: 'Relevant memories:\n' + memList.join('\n') });
+      } catch (err) { console.error('Failed to load memories (stream):', err.message); }
+    }
+    prepared = prepared.concat(userMessages);
+    let provider = 'local-fallback';
+    let reply = '';
+    let providerData = null;
+    try {
+      const data = await callOpenRouter(prepared, model);
+      providerData = data;
+      if (data && data.choices && data.choices[0]) {
+        reply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
+      }
+      provider = 'openrouter';
+    } catch (err) {
+      console.error('OpenRouter error:', err.message);
+      reply = 'I’m having trouble connecting to the AI provider right now.';
+    }
+    if (admin.apps.length && req.user && req.user.uid) {
+      try {
+        const uid = req.user.uid;
+        const db = admin.database();
+        const convRef = conversationId
+          ? db.ref(`users/${uid}/conversations/${conversationId}`)
+          : db.ref(`users/${uid}/conversations`).push();
+        const now = Date.now();
+        const update = { updatedAt: now, model: model || DEFAULT_AI_MODEL };
+        if (!conversationId) { update.createdAt = now; update.title = userMessages[0] ? userMessages[0].content.slice(0, 120) : 'New conversation'; }
+        await convRef.update(update);
+        const msgsRef = convRef.child('messages');
+        await msgsRef.push({ role: 'user', content: userMessages[userMessages.length - 1].content, createdAt: Date.now() });
+        await msgsRef.push({ role: 'assistant', content: reply, createdAt: Date.now() });
+        const usageRef = db.ref(`users/${uid}/usage`).push();
+        const usageRecord = { conversationId: convRef.key || conversationId, model: model || DEFAULT_AI_MODEL, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCost: null, createdAt: Date.now() };
+        if (providerData && providerData.usage) {
+          usageRecord.inputTokens = providerData.usage.input_tokens || providerData.usage.prompt_tokens || null;
+          usageRecord.outputTokens = providerData.usage.output_tokens || providerData.usage.completion_tokens || null;
+          usageRecord.totalTokens = providerData.usage.total_tokens || null;
+          if (providerData.usage.estimated_cost) usageRecord.estimatedCost = providerData.usage.estimated_cost;
+        }
+        await usageRef.set(usageRecord);
+      } catch (err) {
+        console.error('Failed to persist conversation:', err.message);
+      }
+    }
+    return res.json({ reply, provider });
+  } catch (err) {
+    console.error('Chat handler error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Streaming chat endpoint (SSE-style chunks). If provider streaming is available, replace simulation with provider stream.
+app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) => {
+  try {
+    const { messages, model, conversationId } = req.body || {};
+    const userMessages = sanitizeMessages(messages);
+    if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
+    const prepared = [{ role: 'system', content: SYSTEM_PROMPT }, ...userMessages];
+
+    // Call provider (single response) and then stream it back in chunks to the client.
+    let providerData = null;
+    let fullReply = '';
+    try {
+      const data = await callOpenRouter(prepared, model);
+      providerData = data;
+      if (data && data.choices && data.choices[0]) {
+        fullReply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
+      }
+    } catch (err) {
+      console.error('OpenRouter error:', err.message);
+      fullReply = 'I’m having trouble connecting to the AI provider right now.';
+    }
+
+    // Persist messages as usual (fire-and-forget)
+    if (admin.apps.length && req.user && req.user.uid) {
+      (async () => {
+        try {
+          const uid = req.user.uid;
+          const db = admin.database();
+          const convRef = conversationId
+            ? db.ref(`users/${uid}/conversations/${conversationId}`)
+            : db.ref(`users/${uid}/conversations`).push();
+          const now = Date.now();
+          const update = { updatedAt: now, model: model || DEFAULT_AI_MODEL };
+          if (!conversationId) { update.createdAt = now; update.title = userMessages[0] ? userMessages[0].content.slice(0, 120) : 'New conversation'; }
+          await convRef.update(update);
+          const msgsRef = convRef.child('messages');
+          await msgsRef.push({ role: 'user', content: userMessages[userMessages.length - 1].content, createdAt: Date.now() });
+          await msgsRef.push({ role: 'assistant', content: fullReply, createdAt: Date.now() });
+          const usageRef = db.ref(`users/${uid}/usage`).push();
+          const usageRecord = { conversationId: convRef.key || conversationId, model: model || DEFAULT_AI_MODEL, inputTokens: null, outputTokens: null, totalTokens: null, estimatedCost: null, createdAt: Date.now() };
+          if (providerData && providerData.usage) {
+            usageRecord.inputTokens = providerData.usage.input_tokens || providerData.usage.prompt_tokens || null;
+            usageRecord.outputTokens = providerData.usage.output_tokens || providerData.usage.completion_tokens || null;
+            usageRecord.totalTokens = providerData.usage.total_tokens || null;
+            if (providerData.usage.estimated_cost) usageRecord.estimatedCost = providerData.usage.estimated_cost;
+          }
+          await usageRef.set(usageRecord);
+        } catch (err) {
+          console.error('Failed to persist conversation (stream):', err.message);
+        }
+        // Simple memory extraction
+        try {
+          const lastUser = userMessages[userMessages.length - 1] && userMessages[userMessages.length - 1].content;
+          if (lastUser) {
+            const match = lastUser.match(/\b(I am|I'm|I\s+work|I\s+like|I\s+love|I\s+build)\b(.{0,200})/i);
+            if (match) {
+              const memRef = admin.database().ref(`users/${uid}/memories`).push();
+              await memRef.set({ content: match[0].slice(0, 500), category: 'auto', importance: 1, createdAt: Date.now(), updatedAt: Date.now() });
+            }
+          }
+        } catch (err) { console.error('Memory extraction failed (stream):', err.message); }
+      })();
+    }
+
+    // Stream reply back to client using SSE-style text/event-stream
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive'
+    });
+
+    // Send an initial ping
+    res.write('event: meta\n');
+    res.write('data: {"status":"ok"}\n\n');
+
+    // Simulate streaming by splitting reply into chunks
+    const chunkSize = 80;
+    for (let i = 0; i < fullReply.length; i += chunkSize) {
+      const chunk = fullReply.slice(i, i + chunkSize);
+      res.write('data: ' + JSON.stringify({ delta: chunk }) + '\n\n');
+      // small delay between chunks to give streaming effect
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
+    // final end event
+    res.write('event: done\n');
+    res.write('data: {"ok":true}\n\n');
+    res.end();
+  } catch (err) {
+    console.error('Stream handler error:', err.message);
+    try { res.status(500).json({ error: 'Stream error' }); } catch (e) {}
+  }
 });

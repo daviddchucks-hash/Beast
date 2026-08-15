@@ -67,11 +67,12 @@
           <button class="icon-button menu-button" id="sidebar-open" type="button" aria-label="Open sidebar">
             <span aria-hidden="true">☰</span>
           </button>
-          <button class="model-picker" type="button" aria-label="Choose model">
-            <span>Drexora AI</span>
-            <span class="model-badge">Standard</span>
+          <button class="model-picker" id="model-picker" type="button" aria-label="Choose model">
+            <span id="model-picker-label">Drexora AI</span>
+            <span class="model-badge" id="model-badge">Standard</span>
             <span class="chevron" aria-hidden="true">⌄</span>
           </button>
+          <div id="model-menu" class="model-menu" aria-hidden="true"></div>
           <button class="icon-button" id="auth-button" type="button" aria-label="Sign in">Sign in</button>
           <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Local fallback</span>
           <div class="header-actions">
@@ -113,9 +114,39 @@
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <!-- Optional: include Firebase client SDK and set window.__FIREBASE_CONFIG in your build or index.html -->
+    <!-- Firebase client SDK and a small config placeholder. Replace the values with your project's web config. -->
+    <script>
+      window.__FIREBASE_CONFIG = {
+        apiKey: "YOUR_FIREBASE_API_KEY",
+        authDomain: "YOUR_PROJECT.firebaseapp.com",
+        projectId: "beastai-f0702",
+        storageBucket: "YOUR_PROJECT.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID",
+        databaseURL: "https://beastai-f0702.firebaseio.com"
+      };
+    </script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="script.js"></script>
+
+    <!-- Auth modal -->
+    <div id="auth-modal" class="auth-modal" aria-hidden="true">
+      <div class="auth-panel">
+        <button class="auth-close" id="auth-close">×</button>
+        <h2 id="auth-title">Sign in</h2>
+        <form id="auth-form">
+          <label>Email <input type="email" id="auth-email" required></label>
+          <label>Password <input type="password" id="auth-password" required></label>
+          <div class="auth-actions">
+            <button type="submit" id="auth-submit">Sign in</button>
+            <button type="button" id="auth-switch">Create account</button>
+            <button type="button" id="auth-reset">Forgot password</button>
+          </div>
+        </form>
+        <div id="auth-error" class="auth-error" aria-live="polite"></div>
+      </div>
+    </div>
   </body>
 </html>
