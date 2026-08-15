@@ -31,6 +31,8 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
 const AI_RATE_LIMIT_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 60;
+// Allow an opt-in public chat mode (no Firebase auth required) when true.
+const PUBLIC_CHAT = String(process.env.PUBLIC_CHAT || '').toLowerCase() === 'true';
 
 const SYSTEM_PROMPT = (process.env.SYSTEM_PROMPT || [
   'You are Drexora AI, a helpful, clear, thoughtful general-purpose assistant.',
@@ -75,7 +77,13 @@ const limiter = rateLimit({
 async function verifyFirebaseToken(req, res, next) {
   const auth = req.headers.authorization;
   if (!admin.apps.length) return next();
-  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing Authorization header' });
+  if (!auth || !auth.startsWith('Bearer ')) {
+    // allow unauthenticated access to the chat endpoints when PUBLIC_CHAT is enabled
+    if (PUBLIC_CHAT && req.path && (req.path.startsWith('/api/ai/chat') || req.path === '/api/chat' || req.path.startsWith('/api/ai/chat/stream'))) {
+      return next();
+    }
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
   const idToken = auth.split(' ')[1];
   try {
     const decoded = await admin.auth().verifyIdToken(idToken);
