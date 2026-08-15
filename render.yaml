@@ -5,7 +5,21 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      - key: OPENAI_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: OPENAI_MODEL
+      - key: OPENROUTER_API_URL
+        value: https://api.openrouter.ai/v1
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://your-frontend.example.com
+      - key: DEFAULT_AI_MODEL
         value: gpt-4o-mini
+      - key: AI_RATE_LIMIT_PER_MINUTE
+        value: '60'
+      - key: NODE_ENV
+        value: production

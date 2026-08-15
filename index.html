@@ -72,6 +72,7 @@
             <span class="model-badge">Standard</span>
             <span class="chevron" aria-hidden="true">⌄</span>
           </button>
+          <button class="icon-button" id="auth-button" type="button" aria-label="Sign in">Sign in</button>
           <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Local fallback</span>
           <div class="header-actions">
             <button class="icon-button" type="button" id="share-chat" aria-label="Share chat"><span aria-hidden="true">↗</span></button>
@@ -112,6 +113,9 @@
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <!-- Optional: include Firebase client SDK and set window.__FIREBASE_CONFIG in your build or index.html -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

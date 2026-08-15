@@ -14,6 +14,9 @@
   var responseTimer;
   var activeRequest = null;
   var chatMessages = [];
+  var authButton = document.getElementById('auth-button');
+  var currentUser = null;
+  var currentIdToken = null;
 
   function showToast(message) {
     toast.textContent = message;
@@ -112,9 +115,11 @@
     updateComposer();
 
     try {
+      var headers = { 'Content-Type': 'application/json' };
+      if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
       var response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           messages: chatMessages,
           deepThinking: document.getElementById('deep-think').classList.contains('active')
@@ -179,6 +184,58 @@
   }
 
   bindPromptCards();
+
+  // Firebase Auth boot (optional)
+  function initFirebaseAuth() {
+    if (!window.firebase || !window.__FIREBASE_CONFIG) return;
+    try {
+      firebase.initializeApp(window.__FIREBASE_CONFIG);
+      var auth = firebase.auth();
+      auth.onAuthStateChanged(function (user) {
+        currentUser = user;
+        if (user) {
+          user.getIdToken().then(function (t) { currentIdToken = t; updateAuthButton(); });
+        } else {
+          currentIdToken = null;
+          updateAuthButton();
+        }
+      });
+    } catch (err) {
+      console.warn('Firebase init failed', err);
+    }
+  }
+
+  function updateAuthButton() {
+    if (!authButton) return;
+    if (currentUser) authButton.textContent = 'Sign out';
+    else authButton.textContent = 'Sign in';
+  }
+
+  if (authButton) {
+    authButton.addEventListener('click', function () {
+      if (!window.firebase) return alert('Firebase not configured. See README to configure Firebase.');
+      var auth = firebase.auth();
+      if (currentUser) {
+        auth.signOut();
+        showToast('Signed out');
+      } else {
+        var email = prompt('Email');
+        if (!email) return;
+        var password = prompt('Password');
+        if (!password) return;
+        auth.signInWithEmailAndPassword(email, password).catch(function (err) {
+          // if sign-in fails, offer account creation
+          if (confirm('Sign-in failed. Create a new account?')) {
+            auth.createUserWithEmailAndPassword(email, password).then(function () { showToast('Account created'); }).catch(function (e) { alert(e.message); });
+          } else {
+            alert(err.message);
+          }
+        });
+      }
+    });
+  }
+
+  initFirebaseAuth();
 
   document.querySelectorAll('.history-item').forEach(function (button) {
     button.addEventListener('click', function () {
