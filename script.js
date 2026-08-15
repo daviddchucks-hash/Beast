@@ -42,10 +42,11 @@
   var memoriesRefresh = document.getElementById('memories-refresh');
   var regenerateBtn = document.getElementById('regenerate');
   var stopBtn = document.getElementById('stop-generation');
+  var API_BASE = (window.__BACKEND_URL && window.__BACKEND_URL.replace(/\/$/, '')) || location.origin;
 
   async function loadModels() {
     try {
-      const r = await fetch('/api/ai/models');
+      const r = await fetch(API_BASE + '/api/ai/models');
       if (!r.ok) return;
       const data = await r.json();
       const models = data.models || [];
@@ -179,7 +180,7 @@
       try {
         var headers = { 'Content-Type': 'application/json' };
         if (currentIdToken) headers['Authorization'] = 'Bearer ' + currentIdToken;
-        var response = await fetch('/api/ai/chat', {
+        var response = await fetch(API_BASE + '/api/ai/chat', {
           method: 'POST',
           headers: headers,
           body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
@@ -208,7 +209,7 @@
     activeRequest = controller;
     if (stopBtn) stopBtn.disabled = false;
     updateComposer();
-    var response = await fetch('/api/ai/chat/stream', {
+    var response = await fetch(API_BASE + '/api/ai/chat/stream', {
       method: 'POST',
       headers: headers,
       body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
@@ -390,7 +391,7 @@
     historyEl.innerHTML = '';
     if (!currentIdToken) return;
     try {
-      const r = await fetch('/api/conversations', { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      const r = await fetch(API_BASE + '/api/conversations', { headers: { Authorization: 'Bearer ' + currentIdToken } });
       if (!r.ok) return;
       const data = await r.json();
       const list = data.conversations || [];
@@ -407,9 +408,9 @@
         actions.appendChild(rename); actions.appendChild(archive); actions.appendChild(del);
         btn.appendChild(actions);
         btn.addEventListener('click', function (ev) { if (ev.target && ev.target.classList.contains('history-action')) return; loadConversation(c.id); document.querySelectorAll('.history-item').forEach(function (it) { it.classList.remove('selected'); }); btn.classList.add('selected'); toggleSidebar(false); });
-        rename.addEventListener('click', function (ev) { ev.stopPropagation(); const t = prompt('New title', c.title || ''); if (t !== null) { fetch('/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: t }) }).then(function () { loadConversations(); }); } });
-        archive.addEventListener('click', function (ev) { ev.stopPropagation(); fetch('/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ archived: true }) }).then(function () { loadConversations(); }); });
-        del.addEventListener('click', function (ev) { ev.stopPropagation(); if (!confirm('Delete this conversation?')) return; fetch('/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(function () { loadConversations(); if (currentConversationId === c.id) resetChat(); }); });
+        rename.addEventListener('click', function (ev) { ev.stopPropagation(); const t = prompt('New title', c.title || ''); if (t !== null) { fetch(API_BASE + '/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: t }) }).then(function () { loadConversations(); }); } });
+        archive.addEventListener('click', function (ev) { ev.stopPropagation(); fetch(API_BASE + '/api/conversations/' + c.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ archived: true }) }).then(function () { loadConversations(); }); });
+        del.addEventListener('click', function (ev) { ev.stopPropagation(); if (!confirm('Delete this conversation?')) return; fetch(API_BASE + '/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(function () { loadConversations(); if (currentConversationId === c.id) resetChat(); }); });
         historyEl.appendChild(btn);
       });
     } catch (err) { console.warn('Failed to load conversations', err); }
@@ -417,7 +418,7 @@
 
   async function createConversation() {
     try {
-      const r = await fetch('/api/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: 'New conversation' }) });
+      const r = await fetch(API_BASE + '/api/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + currentIdToken }, body: JSON.stringify({ title: 'New conversation' }) });
       if (!r.ok) throw new Error('Failed');
       const data = await r.json();
       currentConversationId = data.id;
@@ -430,7 +431,7 @@
 
   async function loadConversation(id) {
     try {
-      const r = await fetch('/api/conversations/' + id, { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      const r = await fetch(API_BASE + '/api/conversations/' + id, { headers: { Authorization: 'Bearer ' + currentIdToken } });
       if (!r.ok) { showToast('Failed to load conversation'); return; }
       const data = await r.json();
       currentConversationId = id;
@@ -448,7 +449,7 @@
   async function fetchMemories() {
     if (!currentIdToken) { memoriesList.innerHTML = '<div class="memory">Sign in to view memories</div>'; return; }
     try {
-      const r = await fetch('/api/memory', { headers: { Authorization: 'Bearer ' + currentIdToken } });
+      const r = await fetch(API_BASE + '/api/memory', { headers: { Authorization: 'Bearer ' + currentIdToken } });
       if (!r.ok) { memoriesList.innerHTML = '<div class="memory">Failed to load</div>'; return; }
       const data = await r.json();
       const mems = data.memories || [];
@@ -457,13 +458,13 @@
         const el = document.createElement('div'); el.className = 'memory'; el.innerHTML = '<div class="content">' + (m.content || '') + '</div><div class="meta"><button class="mem-del" data-id="' + m.id + '">Delete</button></div>';
         memoriesList.appendChild(el);
       });
-      memoriesList.querySelectorAll('.mem-del').forEach(function (b) { b.addEventListener('click', async function () { const id = b.getAttribute('data-id'); await fetch('/api/memory/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }); fetchMemories(); }); });
+      memoriesList.querySelectorAll('.mem-del').forEach(function (b) { b.addEventListener('click', async function () { const id = b.getAttribute('data-id'); await fetch(API_BASE + '/api/memory/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }); fetchMemories(); }); });
     } catch (err) { memoriesList.innerHTML = '<div class="memory">Error</div>'; }
   }
 
   if (openMemoriesBtn) openMemoriesBtn.addEventListener('click', function (ev) { ev.preventDefault(); openMemories(); });
   if (memoriesClose) memoriesClose.addEventListener('click', closeMemories);
-  if (memoriesClear) memoriesClear.addEventListener('click', function () { if (!confirm('Clear all memories?')) return; fetch('/api/memory', { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(fetchMemories); });
+  if (memoriesClear) memoriesClear.addEventListener('click', function () { if (!confirm('Clear all memories?')) return; fetch(API_BASE + '/api/memory', { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } }).then(fetchMemories); });
   if (memoriesRefresh) memoriesRefresh.addEventListener('click', fetchMemories);
 
   function regenerateLast() {
@@ -518,10 +519,10 @@
     }
     if (!confirm('Delete all conversations from your account? This cannot be undone.')) return;
     // fetch and delete
-    fetch('/api/conversations', { headers: currentIdToken ? { Authorization: 'Bearer ' + currentIdToken } : {} }).then(function (r) { return r.json(); }).then(async function (data) {
+    fetch(API_BASE + '/api/conversations', { headers: currentIdToken ? { Authorization: 'Bearer ' + currentIdToken } : {} }).then(function (r) { return r.json(); }).then(async function (data) {
       var list = data.conversations || [];
       for (const c of list) {
-        await fetch('/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } });
+        await fetch(API_BASE + '/api/conversations/' + c.id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + currentIdToken } });
       }
       historyEl.innerHTML = '';
       showToast('All conversations deleted');
@@ -536,7 +537,7 @@
       try {
         var text = '';
         if (currentConversationId && currentIdToken) {
-          const r = await fetch('/api/conversations/' + currentConversationId, { headers: { Authorization: 'Bearer ' + currentIdToken } });
+          const r = await fetch(API_BASE + '/api/conversations/' + currentConversationId, { headers: { Authorization: 'Bearer ' + currentIdToken } });
           if (r.ok) {
             const data = await r.json();
             text = (data.title ? data.title + '\n\n' : '') + (data.messages || []).map((m) => (m.role + ': ' + m.content)).join('\n\n');
@@ -585,5 +586,20 @@
     }
     if (event.key === 'Escape') toggleSidebar(false);
   });
+  // Ping backend health and update status
+  (function checkBackend() {
+    try {
+      fetch(API_BASE + '/api/health').then(function (r) {
+        if (!r.ok) return setConnectionStatus('offline', 'Backend unreachable');
+        return r.json().then(function (data) {
+          if (data && data.status === 'ok') {
+            if (data.aiConfigured) setConnectionStatus('connected', 'Connected');
+            else setConnectionStatus('warning', 'AI not configured');
+          } else setConnectionStatus('offline', 'Backend unreachable');
+        });
+      }).catch(function () { setConnectionStatus('offline', 'Backend unreachable'); });
+    } catch (e) { setConnectionStatus('offline', 'Backend unreachable'); }
+  })();
+
   updateComposer();
 })();
