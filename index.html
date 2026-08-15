@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Drexora AI</title>
-    <meta name="description" content="Drexora AI — a focused, private-feeling AI chat workspace.">
+    <title>Beast AI</title>
+    <meta name="description" content="Beast AI — a focused, private-feeling AI chat workspace.">
     <meta name="theme-color" content="#212121">
-    <link rel="icon" type="image/png" href="assets/drexora-mark.png">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
     <link rel="stylesheet" href="style.css">
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" id="sidebar" aria-label="Chat history">
         <div class="sidebar-top">
-          <a class="brand" href="index.html" aria-label="Drexora AI home">
+          <a class="brand" href="index.html" aria-label="Beast AI home">
             <span class="brand-mark"><img src="assets/drexora-mark.png" alt=""></span>
-            <span>Drexora AI</span>
+            <span>Beast AI</span>
           </a>
           <button class="icon-button sidebar-close" id="sidebar-close" type="button" aria-label="Close sidebar">
             <span aria-hidden="true">×</span>
@@ -30,33 +30,19 @@
 
         <div class="history" id="history">
           <p class="history-label">Today</p>
-          <button class="history-item selected" type="button" data-chat="Welcome to Drexora AI">
+          <button class="history-item selected" type="button" data-chat="Welcome to Beast AI">
             <span class="history-icon" aria-hidden="true">◌</span>
-            <span>Welcome to Drexora AI</span>
-          </button>
-          <button class="history-item" type="button" data-chat="Ideas for a better morning">
-            <span class="history-icon" aria-hidden="true">◌</span>
-            <span>Ideas for a better morning</span>
-          </button>
-          <p class="history-label older">Previous 7 days</p>
-          <button class="history-item" type="button" data-chat="Plan my next project">
-            <span class="history-icon" aria-hidden="true">◌</span>
-            <span>Plan my next project</span>
-          </button>
-          <button class="history-item" type="button" data-chat="Explain quantum computing">
-            <span class="history-icon" aria-hidden="true">◌</span>
-            <span>Explain quantum computing</span>
+            <span>Welcome to Beast AI</span>
           </button>
         </div>
 
         <div class="sidebar-bottom">
           <a class="sidebar-link" href="#" id="clear-history"><span class="sidebar-link-icon" aria-hidden="true">⌫</span> Clear conversations</a>
-          <a class="sidebar-link" href="#" id="open-memories"><span class="sidebar-link-icon" aria-hidden="true">★</span> Memories</a>
+          <a class="sidebar-link" href="#" id="open-settings"><span class="sidebar-link-icon" aria-hidden="true">⚙</span> API Keys &amp; Settings</a>
           <a class="sidebar-link" href="mailto:drexxora@yahoo.com"><span class="sidebar-link-icon" aria-hidden="true">?</span> Help &amp; feedback</a>
           <div class="user-card">
-            <span class="avatar">D</span>
-            <span class="user-copy"><strong>Drexora user</strong><small>Personal workspace</small></span>
-            <button class="icon-button more-button" type="button" aria-label="More account options">•••</button>
+            <span class="avatar">B</span>
+            <span class="user-copy"><strong>Beast user</strong><small>Personal workspace</small></span>
           </div>
         </div>
       </aside>
@@ -73,13 +59,12 @@
             <button class="provider-tab" type="button" data-provider="gemini">Gemini</button>
           </div>
           <button class="model-picker" id="model-picker" type="button" aria-label="Choose model">
-            <span id="model-picker-label">Drexora AI</span>
-            <span class="model-badge" id="model-badge">Standard</span>
+            <span id="model-picker-label">Beast AI</span>
+            <span class="model-badge" id="model-badge">Select model</span>
             <span class="chevron" aria-hidden="true">⌄</span>
           </button>
           <div id="model-menu" class="model-menu" aria-hidden="true"></div>
-          <button class="icon-button" id="auth-button" type="button" aria-label="Sign in">Sign in</button>
-          <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Local fallback</span>
+          <span class="connection-status" id="connection-status" aria-live="polite"><i></i> Not configured</span>
           <div class="header-actions">
             <button class="icon-button" type="button" id="regenerate" aria-label="Regenerate"><span aria-hidden="true">⟲</span></button>
             <button class="icon-button" type="button" id="stop-generation" aria-label="Stop generation" disabled><span aria-hidden="true">■</span></button>
@@ -92,7 +77,7 @@
           <div class="welcome-state" id="welcome-state">
             <div class="welcome-mark"><img src="assets/drexora-mark.png" alt=""></div>
             <h1>How can I help you today?</h1>
-            <p>Ask Drexora AI to think, write, plan, or explore with you.</p>
+            <p>Ask Beast AI to think, write, plan, or explore with you.</p>
             <div class="prompt-grid">
               <button class="prompt-card" type="button" data-prompt="Help me plan a focused and productive day"><span class="prompt-icon purple" aria-hidden="true">◷</span><span><strong>Plan my day</strong><small>Create a focused routine</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
               <button class="prompt-card" type="button" data-prompt="Give me five creative ideas for a side project"><span class="prompt-icon lime" aria-hidden="true">✦</span><span><strong>Explore ideas</strong><small>Find a fresh direction</small></span><span class="prompt-arrow" aria-hidden="true">↗</span></button>
@@ -104,7 +89,7 @@
 
         <div class="composer-wrap">
           <form class="composer" id="composer">
-            <textarea id="prompt-input" rows="1" placeholder="Message Drexora AI" aria-label="Message Drexora AI"></textarea>
+            <textarea id="prompt-input" rows="1" placeholder="Message Beast AI" aria-label="Message Beast AI"></textarea>
             <div class="composer-toolbar">
               <div class="composer-tools">
                 <button class="composer-tool" type="button" id="attach-file" aria-label="Attach a file"><span aria-hidden="true">＋</span><span>Attach</span></button>
@@ -116,58 +101,32 @@
               </div>
             </div>
           </form>
-          <p class="composer-note">Drexora AI can make mistakes. Check important information.</p>
+          <p class="composer-note">Beast AI can make mistakes. Check important information.</p>
         </div>
       </main>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <!-- Firebase client SDK and a small config placeholder. Replace the values with your project's web config. -->
-    <script>
-      window.__FIREBASE_CONFIG = {
-        apiKey: "AIzaSyCtxYxED0GrW6BgR6N-dibv4TMzxbEUEhw",
-        authDomain: "beastai-f0702.firebaseapp.com",
-        projectId: "beastai-f0702",
-        storageBucket: "beastai-f0702.firebasestorage.app",
-        messagingSenderId: "421664817885",
-        appId: "1:421664817885:web:82d2156c43fed9fe555134",
-        measurementId: "G-RB9JNCJ9L7",
-        databaseURL: "https://beastai-f0702-default-rtdb.firebaseio.com"
-      };
-      // The API backend is hosted separately on Render.
-      window.__BACKEND_URL = window.__BACKEND_URL || 'https://drexora-ai.onrender.com';
-    </script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <script src="script.js"></script>
 
-    <!-- Auth modal -->
-    <div id="auth-modal" class="auth-modal" aria-hidden="true">
-      <div class="auth-panel">
-        <button class="auth-close" id="auth-close">×</button>
-        <h2 id="auth-title">Sign in</h2>
-        <form id="auth-form">
-          <label>Email <input type="email" id="auth-email" required></label>
-          <label>Password <input type="password" id="auth-password" required></label>
-          <div class="auth-actions">
-            <button type="submit" id="auth-submit">Sign in</button>
-            <button type="button" id="auth-switch">Create account</button>
-            <button type="button" id="auth-reset">Forgot password</button>
-          </div>
-        </form>
-        <div id="auth-error" class="auth-error" aria-live="polite"></div>
-      </div>
-    </div>
-    <!-- Memories modal -->
-    <div id="memories-modal" class="auth-modal" aria-hidden="true">
-      <div class="auth-panel">
-        <button class="auth-close" id="memories-close">×</button>
-        <h2>Memories</h2>
-        <div id="memories-list" style="max-height:400px; overflow:auto; margin-top:10px;"></div>
-        <div style="margin-top:12px; display:flex; gap:8px;">
-          <button id="memories-clear">Clear memories</button>
-          <button id="memories-refresh">Refresh</button>
+    <!-- Settings modal -->
+    <div id="settings-modal" class="auth-modal" aria-hidden="true">
+      <div class="auth-panel settings-panel">
+        <button class="auth-close" id="settings-close">×</button>
+        <h2>API Keys &amp; Settings</h2>
+        <p class="settings-desc">Enter your free API keys to power the AI. Keys are stored only in your browser and never sent to any server except the AI provider.</p>
+        <label>OpenRouter API Key
+          <input type="password" id="openrouter-key-input" placeholder="sk-or-v1-...">
+        </label>
+        <p class="settings-hint">Get a free key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a></p>
+        <label>Google Gemini API Key
+          <input type="password" id="gemini-key-input" placeholder="AIza...">
+        </label>
+        <p class="settings-hint">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></p>
+        <div class="auth-actions">
+          <button type="button" id="settings-save">Save keys</button>
+          <button type="button" id="settings-clear">Clear keys</button>
         </div>
+        <div id="settings-status" class="auth-error" aria-live="polite"></div>
       </div>
     </div>
   </body>
