@@ -68,7 +68,9 @@ npm start
 Open `http://localhost:3000` in your browser. The UI includes a Sign in button (top-right) which opens a simple auth modal.
 
 Frontend Firebase configuration
-- Add your Firebase web config to `index.html` by replacing the `window.__FIREBASE_CONFIG` placeholder. This config is public client-side config (not a secret).
+- The Beast Firebase web config is already set in `index.html`. Firebase web configuration values are public client-side settings, not server credentials.
+- If you use a different Firebase project, replace `window.__FIREBASE_CONFIG` and update `FIREBASE_DATABASE_URL` in the backend environment.
+- The frontend uses the same origin for API calls by default. Set `window.__BACKEND_URL` before `script.js` only when the frontend and backend are hosted separately.
 
 API endpoints (implemented)
 - `GET /api/health` — returns { status: 'ok' }

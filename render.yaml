@@ -15,8 +15,10 @@ services:
         sync: false
       - key: FIREBASE_PRIVATE_KEY
         sync: false
+      - key: FIREBASE_DATABASE_URL
+        value: https://beastai-f0702-default-rtdb.firebaseio.com
       - key: FRONTEND_URL
-        value: https://your-frontend.example.com
+        value: https://drexora-ai.onrender.com
       - key: DEFAULT_AI_MODEL
         value: gpt-4o-mini
       - key: AI_RATE_LIMIT_PER_MINUTE

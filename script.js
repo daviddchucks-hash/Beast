@@ -493,7 +493,7 @@
 
   // reload conversations when auth changes
   (function watchAuthForConversations() {
-    var orig = firebase && firebase.auth ? firebase.auth() : null;
+    var orig = window.firebase && typeof window.firebase.auth === 'function' ? window.firebase.auth() : null;
     if (!orig) return;
     orig.onAuthStateChanged(function (u) { currentUser = u; if (u) { u.getIdToken().then(function (t) { currentIdToken = t; loadConversations(); }); } else { currentIdToken = null; historyEl.innerHTML = ''; } updateAuthButton(); });
   })();

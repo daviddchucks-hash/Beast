@@ -30,6 +30,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
+const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 const AI_RATE_LIMIT_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 60;
 // When true, include provider error details in responses for debugging.
 const SHOW_PROVIDER_ERRORS = String(process.env.SHOW_PROVIDER_ERRORS || '').toLowerCase() === 'true';
@@ -52,7 +53,7 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && proc
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
       }),
-      databaseURL: `https://${process.env.FIREBASE_PROJECT_ID}.firebaseio.com`
+      databaseURL: FIREBASE_DATABASE_URL || `https://${process.env.FIREBASE_PROJECT_ID}-default-rtdb.firebaseio.com`
     });
     console.log('Firebase Admin initialized');
   } catch (err) {
