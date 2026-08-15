@@ -31,8 +31,12 @@ const FRONTEND_URL = process.env.FRONTEND_URL
   : '*';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
+const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
 const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
+// Which provider to use: "auto" (try OpenRouter then Gemini), "openrouter", or "gemini"
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'auto').toLowerCase();
 const AI_RATE_LIMIT_PER_MINUTE = Number(process.env.AI_RATE_LIMIT_PER_MINUTE) || 60;
 // When true, include provider error details in responses for debugging.
 const SHOW_PROVIDER_ERRORS = String(process.env.SHOW_PROVIDER_ERRORS || '').toLowerCase() === 'true';
@@ -109,12 +113,21 @@ async function verifyFirebaseToken(req, res, next) {
   }
 }
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', aiConfigured: Boolean(OPENROUTER_API_KEY) }));
+app.get('/api/health', (req, res) => res.json({
+  status: 'ok',
+  aiConfigured: Boolean(OPENROUTER_API_KEY || GEMINI_API_KEY),
+  providers: {
+    openrouter: Boolean(OPENROUTER_API_KEY),
+    gemini: Boolean(GEMINI_API_KEY)
+  }
+}));
 
 app.get('/api/ai/models', (req, res) => {
   const envList = (process.env.AVAILABLE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const models = envList.length ? envList : [DEFAULT_AI_MODEL];
-  res.json({ models, defaultModel: DEFAULT_AI_MODEL });
+  const geminiModels = GEMINI_API_KEY ? ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'] : [];
+  const openrouterModels = OPENROUTER_API_KEY ? [DEFAULT_AI_MODEL] : [];
+  const models = envList.length ? envList : [...geminiModels, ...openrouterModels];
+  res.json({ models, defaultModel: models[0] || DEFAULT_AI_MODEL, providers: { openrouter: Boolean(OPENROUTER_API_KEY), gemini: Boolean(GEMINI_API_KEY) } });
 });
 
 async function callOpenRouter(messages, model) {
@@ -135,6 +148,92 @@ async function callOpenRouter(messages, model) {
     throw err;
   }
   return resp.json();
+}
+
+// Convert OpenAI-style messages to Gemini's contents format
+function toGeminiContents(messages) {
+  // Gemini uses role "user" and "model" (not "assistant")
+  return messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+}
+
+async function callGemini(messages, model) {
+  if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
+  const geminiModel = model || 'gemini-1.5-flash';
+  // Pull system prompt out and send via systemInstruction
+  const systemMessages = messages.filter((m) => m.role === 'system');
+  const systemInstruction = systemMessages.map((m) => m.content).join('\n') || undefined;
+  const contents = toGeminiContents(messages);
+  const body = {
+    contents,
+    generationConfig: { temperature: 0.7 }
+  };
+  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
+  const url = `${GEMINI_API_URL}/models/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    const err = new Error(`Gemini request failed: ${resp.status} ${text}`);
+    err.status = resp.status;
+    throw err;
+  }
+  const data = await resp.json();
+  // Normalize to OpenAI-like shape so callers can use the same extraction
+  let reply = '';
+  if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+    const parts = data.candidates[0].content.parts || [];
+    reply = parts.map((p) => p.text || '').join('');
+  }
+  return {
+    choices: [{ message: { content: reply } }],
+    usage: data.usageMetadata
+      ? {
+          prompt_tokens: data.usageMetadata.promptTokenCount,
+          completion_tokens: data.usageMetadata.candidatesTokenCount,
+          total_tokens: data.usageMetadata.totalTokenCount
+        }
+      : undefined
+  };
+}
+
+// Unified provider caller with fallback logic
+async function callAI(messages, model) {
+  const errors = [];
+  if (AI_PROVIDER === 'gemini' || AI_PROVIDER === 'auto') {
+    if (GEMINI_API_KEY) {
+      try {
+        return { ...(await callGemini(messages, model)), provider: 'gemini' };
+      } catch (err) {
+        errors.push('gemini: ' + (err.message || String(err)));
+        if (AI_PROVIDER === 'gemini') throw err;
+      }
+    } else if (AI_PROVIDER === 'gemini') {
+      throw new Error('Gemini API key not configured');
+    }
+  }
+  if (AI_PROVIDER === 'openrouter' || AI_PROVIDER === 'auto') {
+    if (OPENROUTER_API_KEY) {
+      try {
+        return { ...(await callOpenRouter(messages, model)), provider: 'openrouter' };
+      } catch (err) {
+        errors.push('openrouter: ' + (err.message || String(err)));
+        if (AI_PROVIDER === 'openrouter') throw err;
+      }
+    } else if (AI_PROVIDER === 'openrouter') {
+      throw new Error('OpenRouter API key not configured');
+    }
+  }
+  const err = new Error('No AI provider available. Errors: ' + errors.join('; '));
+  err.allErrors = errors;
+  throw err;
 }
 
 function sanitizeMessages(value) {
@@ -168,21 +267,19 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
     }
     prepared = prepared.concat(userMessages);
 
-    // Call OpenRouter
     let provider = 'local-fallback';
     let reply = '';
     let providerData = null;
     try {
-      const data = await callOpenRouter(prepared, model);
+      const data = await callAI(prepared, model);
       providerData = data;
-      // attempt to extract text
+      provider = data.provider || 'unknown';
       if (data && data.choices && data.choices[0]) {
         reply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
       }
-      provider = 'openrouter';
     } catch (err) {
-      console.error('OpenRouter error:', err && err.message ? err.message : String(err));
-      reply = 'I’m having trouble connecting to the AI provider right now.';
+      console.error('AI provider error:', err && err.message ? err.message : String(err));
+      reply = "I'm having trouble connecting to the AI provider right now.";
       var providerError = SHOW_PROVIDER_ERRORS ? (err && (err.message || JSON.stringify(err)) ? (err.message || String(err)) : String(err)) : null;
     }
 
@@ -403,7 +500,11 @@ app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Drexora AI (Express) listening on port ${PORT}`);
-  console.log(OPENROUTER_API_KEY ? `OpenRouter enabled (${DEFAULT_AI_MODEL})` : 'No OpenRouter key configured; AI calls will fail');
+  const providers = [];
+  if (OPENROUTER_API_KEY) providers.push(`OpenRouter (${DEFAULT_AI_MODEL})`);
+  if (GEMINI_API_KEY) providers.push('Gemini');
+  if (providers.length) console.log('AI providers enabled:', providers.join(', '));
+  else console.log('No AI provider configured; AI calls will fail');
 });
 
 // Backwards-compatible route used by older frontends
@@ -430,15 +531,15 @@ app.post('/api/chat', verifyFirebaseToken, limiter, async (req, res) => {
     let reply = '';
     let providerData = null;
     try {
-      const data = await callOpenRouter(prepared, model);
+      const data = await callAI(prepared, model);
       providerData = data;
+      provider = data.provider || 'unknown';
       if (data && data.choices && data.choices[0]) {
         reply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
       }
-      provider = 'openrouter';
     } catch (err) {
-      console.error('OpenRouter error:', err.message);
-      reply = 'I’m having trouble connecting to the AI provider right now.';
+      console.error('AI provider error:', err.message);
+      reply = "I'm having trouble connecting to the AI provider right now.";
     }
     if (admin.apps.length && req.user && req.user.uid) {
       try {
@@ -486,14 +587,14 @@ app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) =
     let providerData = null;
     let fullReply = '';
     try {
-      const data = await callOpenRouter(prepared, model);
+      const data = await callAI(prepared, model);
       providerData = data;
       if (data && data.choices && data.choices[0]) {
         fullReply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');
       }
     } catch (err) {
-      console.error('OpenRouter error:', err && err.message ? err.message : String(err));
-      fullReply = 'I’m having trouble connecting to the AI provider right now.';
+      console.error('AI provider error:', err && err.message ? err.message : String(err));
+      fullReply = "I'm having trouble connecting to the AI provider right now.";
       var providerError = SHOW_PROVIDER_ERRORS ? (err && (err.message || JSON.stringify(err)) ? (err.message || String(err)) : String(err)) : null;
     }
 

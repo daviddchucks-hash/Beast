@@ -9,6 +9,12 @@ services:
         sync: false
       - key: OPENROUTER_API_URL
         value: https://api.openrouter.ai/v1
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta
+      - key: AI_PROVIDER
+        value: auto
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_CLIENT_EMAIL

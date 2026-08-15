@@ -4,7 +4,7 @@ This workspace upgrades Drexora AI into a production-ready assistant using:
 
 - Frontend: existing UI (HTML/CSS/JS)
 - Backend: Node.js + Express (this repo)
-- AI Provider: OpenRouter (server-side only)
+- AI Provider: OpenRouter and/or Google Gemini (server-side only)
 - Authentication: Firebase Authentication (Email/password)
 - Database: Firebase Realtime Database
 - Hosting: Render (backend + static frontend)
@@ -23,8 +23,11 @@ Dependencies added (server)
 - `express`, `cors`, `helmet`, `firebase-admin`, `express-rate-limit`
 
 Required Render environment variables
-- `OPENROUTER_API_KEY` (secret)
+- `OPENROUTER_API_KEY` (secret, optional if using Gemini)
 - `OPENROUTER_API_URL` (optional; default `https://api.openrouter.ai/v1`)
+- `GEMINI_API_KEY` (secret, optional if using OpenRouter — your Google Gemini API key from Google AI Studio)
+- `GEMINI_API_URL` (optional; default `https://generativelanguage.googleapis.com/v1beta`)
+- `AI_PROVIDER` (optional; `auto` to try Gemini then OpenRouter, `gemini` for Gemini only, `openrouter` for OpenRouter only; default `auto`)
 - `FIREBASE_PROJECT_ID` (e.g. `beastai-f0702`)
 - `FIREBASE_CLIENT_EMAIL` (service account client email)
 - `FIREBASE_PRIVATE_KEY` (service account private key; keep secret)
@@ -32,6 +35,8 @@ Required Render environment variables
 - `DEFAULT_AI_MODEL` (e.g. `gpt-4o-mini`)
 - `AI_RATE_LIMIT_PER_MINUTE` (e.g. `60`)
 - `NODE_ENV` (e.g. `production`)
+
+Note: At least one of `OPENROUTER_API_KEY` or `GEMINI_API_KEY` must be set. With `AI_PROVIDER=auto` (the default), the server tries Gemini first, then falls back to OpenRouter.
 
 Firebase setup required
 1. Open your Firebase project `beastai-f0702`.
