@@ -33,10 +33,12 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
 const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
-const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'openrouter/free';
-// Ordered list of free OpenRouter model IDs to try (first that works wins)
-const OPENROUTER_FREE_MODELS = (process.env.OPENROUTER_FREE_MODELS || 'openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,inclusionai/ling-3.0-flash:free').split(',').map((s) => s.trim()).filter(Boolean);
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+// Ordered list of free OpenRouter model IDs (all must be valid free-tier models)
+const OPENROUTER_FREE_MODELS = (process.env.OPENROUTER_FREE_MODELS || 'meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.0-flash-exp:free,deepseek/deepseek-r1:free,nvidia/nemotron-nano-8b-v2:free,microsoft/phi-3-mini-128k-instruct:free').split(',').map((s) => s.trim()).filter(Boolean);
+// List of free Gemini models the user can pick from
+const GEMINI_FREE_MODELS = (process.env.GEMINI_FREE_MODELS || 'gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash,gemini-1.5-flash-8b').split(',').map((s) => s.trim()).filter(Boolean);
 const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 // Which provider to use: "auto" (try OpenRouter then Gemini), "openrouter", or "gemini"
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'auto').toLowerCase();
@@ -126,11 +128,17 @@ app.get('/api/health', (req, res) => res.json({
 }));
 
 app.get('/api/ai/models', (req, res) => {
-  const envList = (process.env.AVAILABLE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const geminiModels = GEMINI_API_KEY ? [GEMINI_MODEL] : [];
   const openrouterModels = OPENROUTER_API_KEY ? OPENROUTER_FREE_MODELS : [];
-  const models = envList.length ? envList : [...geminiModels, ...openrouterModels];
-  res.json({ models, defaultModel: models[0] || DEFAULT_AI_MODEL, providers: { openrouter: Boolean(OPENROUTER_API_KEY), gemini: Boolean(GEMINI_API_KEY) } });
+  const geminiModels = GEMINI_API_KEY ? GEMINI_FREE_MODELS : [];
+  res.json({
+    models: [...openrouterModels, ...geminiModels],
+    defaultModel: (openrouterModels[0] || geminiModels[0] || DEFAULT_AI_MODEL),
+    providers: { openrouter: Boolean(OPENROUTER_API_KEY), gemini: Boolean(GEMINI_API_KEY) },
+    byProvider: {
+      openrouter: openrouterModels,
+      gemini: geminiModels
+    }
+  });
 });
 
 // Diagnostic endpoint: tries each provider and returns the actual error messages
@@ -195,37 +203,31 @@ async function callOpenRouter(messages, model) {
   throw lastErr || new Error('All OpenRouter models failed');
 }
 
-// Convert OpenAI-style messages to Gemini Interactions API input format
-function toGeminiInput(messages) {
-  // The Interactions API accepts an array of steps. user messages become user_input,
-  // assistant messages become model_output. System messages are prepended as instructions.
+// Convert OpenAI-style messages to Gemini generateContent format
+function toGeminiContents(messages) {
   const systemMessages = messages.filter((m) => m.role === 'system');
-  const instructions = systemMessages.map((m) => m.content).join('\n');
-  const input = [];
-  if (instructions) input.push({ type: 'user_input', content: instructions });
+  const systemInstruction = systemMessages.map((m) => m.content).join('\n');
+  const contents = [];
   for (const m of messages) {
     if (m.role === 'system') continue;
-    if (m.role === 'assistant') {
-      input.push({ type: 'model_output', content: m.content });
-    } else {
-      input.push({ type: 'user_input', content: m.content });
-    }
+    contents.push({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    });
   }
-  return input;
+  return { contents, systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined };
 }
 
 async function callGemini(messages, model) {
   if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
-  // Only use the requested model if it starts with "gemini"; otherwise fall back to the configured default.
   const geminiModel = (model && String(model).startsWith('gemini')) ? model : GEMINI_MODEL;
-  const input = toGeminiInput(messages);
+  const { contents, systemInstruction } = toGeminiContents(messages);
   const body = {
-    model: geminiModel,
-    store: false,
-    input,
-    generation_config: { temperature: 0.7 }
+    contents,
+    generationConfig: { temperature: 0.7 }
   };
-  const url = `${GEMINI_API_URL}/interactions?key=${GEMINI_API_KEY}`;
+  if (systemInstruction) body.systemInstruction = systemInstruction;
+  const url = `${GEMINI_API_URL}/models/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -238,54 +240,51 @@ async function callGemini(messages, model) {
     throw err;
   }
   const data = await resp.json();
-  // Extract reply from the last model_output step
   let reply = '';
-  if (data.steps && Array.isArray(data.steps)) {
-    const modelSteps = data.steps.filter((s) => s.type === 'model_output');
-    const last = modelSteps[modelSteps.length - 1];
-    if (last) {
-      if (typeof last.content === 'string') reply = last.content;
-      else if (Array.isArray(last.content)) reply = last.content.map((c) => c.text || '').join('');
-    }
+  if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+    const parts = data.candidates[0].content.parts || [];
+    reply = parts.map((p) => p.text || '').join('');
   }
-  // Fallback: try outputText field
-  if (!reply && data.outputText) reply = data.outputText;
+  if (!reply && data.candidates && data.candidates[0] && data.candidates[0].text) {
+    reply = data.candidates[0].text;
+  }
   return {
     choices: [{ message: { content: reply } }],
-    usage: data.usage
+    usage: data.usageMetadata
       ? {
-          prompt_tokens: data.usage.total_input_tokens || data.usage.input_tokens || null,
-          completion_tokens: data.usage.total_output_tokens || data.usage.output_tokens || null,
-          total_tokens: data.usage.total_tokens || null
+          prompt_tokens: data.usageMetadata.promptTokenCount || null,
+          completion_tokens: data.usageMetadata.candidatesTokenCount || null,
+          total_tokens: data.usageMetadata.totalTokenCount || null
         }
       : undefined
   };
 }
 
-// Unified provider caller with fallback logic
-async function callAI(messages, model) {
+// Unified provider caller with fallback logic. providerOverride: 'openrouter' | 'gemini' | null
+async function callAI(messages, model, providerOverride) {
   const errors = [];
-  if (AI_PROVIDER === 'gemini' || AI_PROVIDER === 'auto') {
+  const requested = (providerOverride || AI_PROVIDER).toLowerCase();
+  if (requested === 'gemini' || requested === 'auto') {
     if (GEMINI_API_KEY) {
       try {
         return { ...(await callGemini(messages, model)), provider: 'gemini' };
       } catch (err) {
         errors.push('gemini: ' + (err.message || String(err)));
-        if (AI_PROVIDER === 'gemini') throw err;
+        if (requested === 'gemini') throw err;
       }
-    } else if (AI_PROVIDER === 'gemini') {
+    } else if (requested === 'gemini') {
       throw new Error('Gemini API key not configured');
     }
   }
-  if (AI_PROVIDER === 'openrouter' || AI_PROVIDER === 'auto') {
+  if (requested === 'openrouter' || requested === 'auto') {
     if (OPENROUTER_API_KEY) {
       try {
         return { ...(await callOpenRouter(messages, model)), provider: 'openrouter' };
       } catch (err) {
         errors.push('openrouter: ' + (err.message || String(err)));
-        if (AI_PROVIDER === 'openrouter') throw err;
+        if (requested === 'openrouter') throw err;
       }
-    } else if (AI_PROVIDER === 'openrouter') {
+    } else if (requested === 'openrouter') {
       throw new Error('OpenRouter API key not configured');
     }
   }
@@ -304,7 +303,7 @@ function sanitizeMessages(value) {
 
 app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
   try {
-    const { messages, model, conversationId } = req.body || {};
+    const { messages, model, conversationId, provider: providerOverride } = req.body || {};
     const userMessages = sanitizeMessages(messages);
     if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
 
@@ -329,7 +328,7 @@ app.post('/api/ai/chat', verifyFirebaseToken, limiter, async (req, res) => {
     let reply = '';
     let providerData = null;
     try {
-      const data = await callAI(prepared, model);
+      const data = await callAI(prepared, model, providerOverride);
       providerData = data;
       provider = data.provider || 'unknown';
       if (data && data.choices && data.choices[0]) {
@@ -570,7 +569,7 @@ app.post('/api/chat', verifyFirebaseToken, limiter, async (req, res) => {
   // reuse the same handler logic by calling the /api/ai/chat handler
   try {
     // delegate by calling the same logic inline
-    const { messages, model, conversationId } = req.body || {};
+    const { messages, model, conversationId, provider: providerOverride } = req.body || {};
     const userMessages = sanitizeMessages(messages);
     if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
     // Fetch relevant memories and include them
@@ -589,7 +588,7 @@ app.post('/api/chat', verifyFirebaseToken, limiter, async (req, res) => {
     let reply = '';
     let providerData = null;
     try {
-      const data = await callAI(prepared, model);
+      const data = await callAI(prepared, model, providerOverride);
       providerData = data;
       provider = data.provider || 'unknown';
       if (data && data.choices && data.choices[0]) {
@@ -636,7 +635,7 @@ app.post('/api/chat', verifyFirebaseToken, limiter, async (req, res) => {
 // Streaming chat endpoint (SSE-style chunks). If provider streaming is available, replace simulation with provider stream.
 app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) => {
   try {
-    const { messages, model, conversationId } = req.body || {};
+    const { messages, model, conversationId, provider } = req.body || {};
     const userMessages = sanitizeMessages(messages);
     if (!userMessages.length) return res.status(400).json({ error: 'No messages provided' });
     const prepared = [{ role: 'system', content: SYSTEM_PROMPT }, ...userMessages];
@@ -645,7 +644,7 @@ app.post('/api/ai/chat/stream', verifyFirebaseToken, limiter, async (req, res) =
     let providerData = null;
     let fullReply = '';
     try {
-      const data = await callAI(prepared, model);
+      const data = await callAI(prepared, model, provider);
       providerData = data;
       if (data && data.choices && data.choices[0]) {
         fullReply = (data.choices[0].message && data.choices[0].message.content) || (data.choices[0].text || '');

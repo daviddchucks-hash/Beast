@@ -32,6 +32,76 @@
   var modelMenu = document.getElementById('model-menu');
   var modelBadge = document.getElementById('model-badge');
   var selectedModel = localStorage.getItem('drexora:model') || null;
+  var selectedProvider = localStorage.getItem('drexora:provider') || 'openrouter';
+  var providerSwitch = document.getElementById('provider-switch');
+  var modelsByProvider = { openrouter: [], gemini: [] };
+
+  async function loadModels() {
+    try {
+      const r = await fetch(API_BASE + '/api/ai/models');
+      if (!r.ok) return;
+      const data = await r.json();
+      modelsByProvider = data.byProvider || { openrouter: [], gemini: [] };
+      // Ensure provider tabs reflect availability
+      providerSwitch.querySelectorAll('.provider-tab').forEach(function (tab) {
+        var p = tab.getAttribute('data-provider');
+        var available = (modelsByProvider[p] || []).length > 0;
+        tab.style.display = available ? '' : 'none';
+        if (!available && selectedProvider === p) {
+          // switch to the other provider if this one has no models
+          selectedProvider = available ? p : (modelsByProvider.openrouter.length ? 'openrouter' : 'gemini');
+          localStorage.setItem('drexora:provider', selectedProvider);
+        }
+      });
+      renderModelMenu();
+    } catch (e) { }
+  }
+
+  function renderModelMenu() {
+    var models = modelsByProvider[selectedProvider] || [];
+    modelMenu.innerHTML = '';
+    models.forEach(function (m) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'model-item' + (m === selectedModel ? ' active' : '');
+      btn.textContent = m;
+      btn.addEventListener('click', function () {
+        selectedModel = m;
+        localStorage.setItem('drexora:model', m);
+        modelBadge.textContent = m.length > 20 ? m.slice(0, 18) + '...' : m;
+        modelMenu.style.display = 'none';
+      });
+      modelMenu.appendChild(btn);
+    });
+    // If current selected model isn't in this provider's list, pick the first one
+    if (models.length && models.indexOf(selectedModel) === -1) {
+      selectedModel = models[0];
+      localStorage.setItem('drexora:model', selectedModel);
+    }
+    if (selectedModel) {
+      modelBadge.textContent = selectedModel.length > 20 ? selectedModel.slice(0, 18) + '...' : selectedModel;
+    }
+  }
+
+  function setActiveProvider(provider) {
+    selectedProvider = provider;
+    localStorage.setItem('drexora:provider', provider);
+    providerSwitch.querySelectorAll('.provider-tab').forEach(function (tab) {
+      tab.classList.toggle('active', tab.getAttribute('data-provider') === provider);
+    });
+    renderModelMenu();
+  }
+
+  if (providerSwitch) {
+    providerSwitch.querySelectorAll('.provider-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var p = tab.getAttribute('data-provider');
+        if ((modelsByProvider[p] || []).length === 0) return;
+        setActiveProvider(p);
+        showToast(p === 'openrouter' ? 'OpenRouter selected' : 'Gemini selected');
+      });
+    });
+  }
   var historyEl = document.getElementById('history');
   var currentConversationId = null;
   var openMemoriesBtn = document.getElementById('open-memories');
@@ -43,37 +113,6 @@
   var regenerateBtn = document.getElementById('regenerate');
   var stopBtn = document.getElementById('stop-generation');
   var API_BASE = (window.__BACKEND_URL && window.__BACKEND_URL.replace(/\/$/, '')) || location.origin;
-
-  async function loadModels() {
-    try {
-      const r = await fetch(API_BASE + '/api/ai/models');
-      if (!r.ok) return;
-      const data = await r.json();
-      const models = data.models || [];
-      modelMenu.innerHTML = '';
-      models.forEach(function (m) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'model-item';
-        btn.textContent = m;
-        btn.addEventListener('click', function () {
-          selectedModel = m;
-          localStorage.setItem('drexora:model', m);
-          modelBadge.textContent = m;
-          modelMenu.style.display = 'none';
-        });
-        modelMenu.appendChild(btn);
-      });
-      if (!selectedModel && data.defaultModel) selectedModel = data.defaultModel;
-      if (selectedModel) modelBadge.textContent = selectedModel;
-      // If the saved model is no longer in the server's list, switch to the server default
-      if (selectedModel && models.length && models.indexOf(selectedModel) === -1 && data.defaultModel) {
-        selectedModel = data.defaultModel;
-        localStorage.setItem('drexora:model', selectedModel);
-        modelBadge.textContent = selectedModel;
-      }
-    } catch (e) { }
-  }
 
   if (modelPicker) {
     modelPicker.addEventListener('click', function () {
@@ -189,7 +228,7 @@
         var response = await fetch(API_BASE + '/api/ai/chat', {
           method: 'POST',
           headers: headers,
-          body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
+          body: JSON.stringify({ messages: chatMessages, model: selectedModel, provider: selectedProvider, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
           signal: controller.signal
         });
         if (!response.ok) throw new Error('AI endpoint unavailable');
@@ -218,7 +257,7 @@
     var response = await fetch(API_BASE + '/api/ai/chat/stream', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ messages: chatMessages, model: selectedModel, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
+      body: JSON.stringify({ messages: chatMessages, model: selectedModel, provider: selectedProvider, deepThinking: document.getElementById('deep-think').classList.contains('active'), conversationId: currentConversationId }),
       signal: controller.signal
     });
     if (!response.ok) throw new Error('Stream endpoint unavailable');
@@ -606,6 +645,10 @@
       }).catch(function () { setConnectionStatus('offline', 'Backend unreachable'); });
     } catch (e) { setConnectionStatus('offline', 'Backend unreachable'); }
   })();
+
+  // Load models and set initial provider on startup
+  loadModels();
+  if (providerSwitch) setActiveProvider(selectedProvider);
 
   updateComposer();
 })();

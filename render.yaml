@@ -14,11 +14,13 @@ services:
       - key: GEMINI_API_URL
         value: https://generativelanguage.googleapis.com/v1beta
       - key: GEMINI_MODEL
-        value: gemini-3.6-flash
+        value: gemini-2.0-flash
+      - key: GEMINI_FREE_MODELS
+        value: gemini-2.0-flash,gemini-2.0-flash-lite,gemini-1.5-flash,gemini-1.5-flash-8b
       - key: AI_PROVIDER
         value: auto
       - key: OPENROUTER_FREE_MODELS
-        value: openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,inclusionai/ling-3.0-flash:free
+        value: meta-llama/llama-3.3-70b-instruct:free,google/gemini-2.0-flash-exp:free,deepseek/deepseek-r1:free,nvidia/nemotron-nano-8b-v2:free,microsoft/phi-3-mini-128k-instruct:free
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_CLIENT_EMAIL
@@ -28,10 +30,14 @@ services:
       - key: FIREBASE_DATABASE_URL
         value: https://beastai-f0702-default-rtdb.firebaseio.com
       - key: FRONTEND_URL
-        value: https://drexora-ai.onrender.com,https://daviddchucks-hash.github.io
+        value: https://daviddchucks-hash.github.io,https://drexora-ai.onrender.com
       - key: DEFAULT_AI_MODEL
-        value: openrouter/free
+        value: meta-llama/llama-3.3-70b-instruct:free
       - key: AI_RATE_LIMIT_PER_MINUTE
         value: '60'
+      - key: PUBLIC_CHAT
+        value: 'true'
+      - key: SHOW_PROVIDER_ERRORS
+        value: 'true'
       - key: NODE_ENV
         value: production
