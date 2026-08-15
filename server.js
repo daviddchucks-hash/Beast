@@ -33,8 +33,10 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = process.env.OPENROUTER_API_URL || 'https://api.openrouter.ai/v1';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
 const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'gpt-4o-mini';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const DEFAULT_AI_MODEL = process.env.DEFAULT_AI_MODEL || 'openrouter/free';
+// Ordered list of free OpenRouter model IDs to try (first that works wins)
+const OPENROUTER_FREE_MODELS = (process.env.OPENROUTER_FREE_MODELS || 'openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,inclusionai/ling-3.0-flash:free').split(',').map((s) => s.trim()).filter(Boolean);
 const FIREBASE_DATABASE_URL = process.env.FIREBASE_DATABASE_URL;
 // Which provider to use: "auto" (try OpenRouter then Gemini), "openrouter", or "gemini"
 const AI_PROVIDER = (process.env.AI_PROVIDER || 'auto').toLowerCase();
@@ -126,56 +128,104 @@ app.get('/api/health', (req, res) => res.json({
 app.get('/api/ai/models', (req, res) => {
   const envList = (process.env.AVAILABLE_MODELS || '').split(',').map((s) => s.trim()).filter(Boolean);
   const geminiModels = GEMINI_API_KEY ? [GEMINI_MODEL] : [];
-  const openrouterModels = OPENROUTER_API_KEY ? [DEFAULT_AI_MODEL] : [];
+  const openrouterModels = OPENROUTER_API_KEY ? OPENROUTER_FREE_MODELS : [];
   const models = envList.length ? envList : [...geminiModels, ...openrouterModels];
   res.json({ models, defaultModel: models[0] || DEFAULT_AI_MODEL, providers: { openrouter: Boolean(OPENROUTER_API_KEY), gemini: Boolean(GEMINI_API_KEY) } });
 });
 
+// Diagnostic endpoint: tries each provider and returns the actual error messages
+app.get('/api/ai/test', async (req, res) => {
+  const result = { gemini: null, openrouter: null };
+  const testMessages = [{ role: 'user', content: 'Say hello in one word.' }];
+  if (GEMINI_API_KEY) {
+    try {
+      const data = await callGemini(testMessages, GEMINI_MODEL);
+      result.gemini = { ok: true, reply: data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content };
+    } catch (err) {
+      result.gemini = { ok: false, error: err.message || String(err), status: err.status || null };
+    }
+  } else {
+    result.gemini = { ok: false, error: 'GEMINI_API_KEY not set' };
+  }
+  if (OPENROUTER_API_KEY) {
+    try {
+      const data = await callOpenRouter(testMessages, DEFAULT_AI_MODEL);
+      result.openrouter = { ok: true, reply: data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content };
+    } catch (err) {
+      result.openrouter = { ok: false, error: err.message || String(err), status: err.status || null };
+    }
+  } else {
+    result.openrouter = { ok: false, error: 'OPENROUTER_API_KEY not set' };
+  }
+  res.json(result);
+});
+
 async function callOpenRouter(messages, model) {
   if (!OPENROUTER_API_KEY) throw new Error('OpenRouter API key not configured');
-  const body = { model: model || DEFAULT_AI_MODEL, messages, temperature: 0.7 };
-  const resp = await fetch(`${OPENROUTER_API_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    const err = new Error(`OpenRouter request failed: ${resp.status} ${text}`);
-    err.status = resp.status;
-    throw err;
+  // Build candidate model list: the requested model first (if it looks like an OpenRouter model),
+  // then the free models list as fallbacks.
+  const candidates = [];
+  if (model && !String(model).startsWith('gemini')) candidates.push(model);
+  for (const m of OPENROUTER_FREE_MODELS) { if (candidates.indexOf(m) === -1) candidates.push(m); }
+  let lastErr = null;
+  for (const m of candidates) {
+    try {
+      const body = { model: m, messages, temperature: 0.7 };
+      const resp = await fetch(`${OPENROUTER_API_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        lastErr = new Error(`OpenRouter ${m} failed: ${resp.status} ${text}`);
+        lastErr.status = resp.status;
+        continue; // try next model
+      }
+      const data = await resp.json();
+      data._model = m;
+      return data;
+    } catch (err) {
+      lastErr = err;
+    }
   }
-  return resp.json();
+  throw lastErr || new Error('All OpenRouter models failed');
 }
 
-// Convert OpenAI-style messages to Gemini's contents format
-function toGeminiContents(messages) {
-  // Gemini uses role "user" and "model" (not "assistant")
-  return messages
-    .filter((m) => m.role !== 'system')
-    .map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }));
+// Convert OpenAI-style messages to Gemini Interactions API input format
+function toGeminiInput(messages) {
+  // The Interactions API accepts an array of steps. user messages become user_input,
+  // assistant messages become model_output. System messages are prepended as instructions.
+  const systemMessages = messages.filter((m) => m.role === 'system');
+  const instructions = systemMessages.map((m) => m.content).join('\n');
+  const input = [];
+  if (instructions) input.push({ type: 'user_input', content: instructions });
+  for (const m of messages) {
+    if (m.role === 'system') continue;
+    if (m.role === 'assistant') {
+      input.push({ type: 'model_output', content: m.content });
+    } else {
+      input.push({ type: 'user_input', content: m.content });
+    }
+  }
+  return input;
 }
 
 async function callGemini(messages, model) {
   if (!GEMINI_API_KEY) throw new Error('Gemini API key not configured');
   // Only use the requested model if it starts with "gemini"; otherwise fall back to the configured default.
   const geminiModel = (model && String(model).startsWith('gemini')) ? model : GEMINI_MODEL;
-  // Pull system prompt out and send via systemInstruction
-  const systemMessages = messages.filter((m) => m.role === 'system');
-  const systemInstruction = systemMessages.map((m) => m.content).join('\n') || undefined;
-  const contents = toGeminiContents(messages);
+  const input = toGeminiInput(messages);
   const body = {
-    contents,
-    generationConfig: { temperature: 0.7 }
+    model: geminiModel,
+    store: false,
+    input,
+    generation_config: { temperature: 0.7 }
   };
-  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
-  const url = `${GEMINI_API_URL}/models/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `${GEMINI_API_URL}/interactions?key=${GEMINI_API_KEY}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -188,19 +238,25 @@ async function callGemini(messages, model) {
     throw err;
   }
   const data = await resp.json();
-  // Normalize to OpenAI-like shape so callers can use the same extraction
+  // Extract reply from the last model_output step
   let reply = '';
-  if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-    const parts = data.candidates[0].content.parts || [];
-    reply = parts.map((p) => p.text || '').join('');
+  if (data.steps && Array.isArray(data.steps)) {
+    const modelSteps = data.steps.filter((s) => s.type === 'model_output');
+    const last = modelSteps[modelSteps.length - 1];
+    if (last) {
+      if (typeof last.content === 'string') reply = last.content;
+      else if (Array.isArray(last.content)) reply = last.content.map((c) => c.text || '').join('');
+    }
   }
+  // Fallback: try outputText field
+  if (!reply && data.outputText) reply = data.outputText;
   return {
     choices: [{ message: { content: reply } }],
-    usage: data.usageMetadata
+    usage: data.usage
       ? {
-          prompt_tokens: data.usageMetadata.promptTokenCount,
-          completion_tokens: data.usageMetadata.candidatesTokenCount,
-          total_tokens: data.usageMetadata.totalTokenCount
+          prompt_tokens: data.usage.total_input_tokens || data.usage.input_tokens || null,
+          completion_tokens: data.usage.total_output_tokens || data.usage.output_tokens || null,
+          total_tokens: data.usage.total_tokens || null
         }
       : undefined
   };
@@ -503,7 +559,7 @@ app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Drexora AI (Express) listening on port ${PORT}`);
   const providers = [];
-  if (OPENROUTER_API_KEY) providers.push(`OpenRouter (${DEFAULT_AI_MODEL})`);
+  if (OPENROUTER_API_KEY) providers.push(`OpenRouter (${OPENROUTER_FREE_MODELS.join(', ')})`);
   if (GEMINI_API_KEY) providers.push('Gemini');
   if (providers.length) console.log('AI providers enabled:', providers.join(', '));
   else console.log('No AI provider configured; AI calls will fail');

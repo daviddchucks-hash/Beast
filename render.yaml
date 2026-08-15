@@ -14,9 +14,11 @@ services:
       - key: GEMINI_API_URL
         value: https://generativelanguage.googleapis.com/v1beta
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.6-flash
       - key: AI_PROVIDER
         value: auto
+      - key: OPENROUTER_FREE_MODELS
+        value: openrouter/free,nvidia/nemotron-3-super-120b-a12b:free,inclusionai/ling-3.0-flash:free
       - key: FIREBASE_PROJECT_ID
         sync: false
       - key: FIREBASE_CLIENT_EMAIL
@@ -28,7 +30,7 @@ services:
       - key: FRONTEND_URL
         value: https://drexora-ai.onrender.com,https://daviddchucks-hash.github.io
       - key: DEFAULT_AI_MODEL
-        value: gpt-4o-mini
+        value: openrouter/free
       - key: AI_RATE_LIMIT_PER_MINUTE
         value: '60'
       - key: NODE_ENV
